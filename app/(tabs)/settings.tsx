@@ -8,8 +8,7 @@ export default function Settings() {
     return (
         <View style={styles.container}>
 
-            <Text style={styles.title}>Settings</Text>
-            <Text style={styles.subtitle}>Manage your preferences</Text>
+            <Text style={styles.title}>Configuraciones</Text>
 
             {/* Perfil */}
             <View style={styles.profileCard}>
@@ -18,21 +17,21 @@ export default function Settings() {
                 </View>
 
                 <View>
-                    <Text style={styles.name}>John Urquijo</Text>
-                    <Text style={styles.email}>john.urquijo@example.com</Text>
-                    <Text style={styles.edit}>Edit Profile</Text>
+                    <Text style={styles.name}>Dorifuto megumin</Text>
+                    <Text style={styles.email}>dorifuto@example.com</Text>
+                    <Text style={styles.edit}>Editar Perfil</Text>
                 </View>
             </View>
 
             {/* Opciones */}
             <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Account</Text>
+                <Text style={styles.sectionTitle}>cuenta</Text>
 
                 <TouchableOpacity style={styles.option}>
 
                     <View style={styles.optionLeft}>
                         <Ionicons name="person-outline" size={20} color="#333" />
-                        <Text style={styles.optionText}>Personal Information</Text>
+                        <Text style={styles.optionText}>Información Personal</Text>
                     </View>
 
                     <Ionicons name="chevron-forward" size={18} color="#999" />
@@ -42,7 +41,7 @@ export default function Settings() {
                 <TouchableOpacity style={styles.option}>
                     <View style={styles.optionLeft}>
                         <Ionicons name="notifications-outline" size={20} color="#333" />
-                        <Text style={styles.optionText}>Notifications</Text>
+                        <Text style={styles.optionText}>Notificaciones</Text>
                     </View>
                     <Ionicons name="chevron-forward" size={18} color="#999" />
                 </TouchableOpacity>
@@ -50,19 +49,19 @@ export default function Settings() {
                 <TouchableOpacity style={styles.option}>
                     <View style={styles.optionLeft}>
                         <Ionicons name="shield-checkmark-outline" size={20} color="#333" />
-                        <Text style={styles.optionText}>Privacy & Security</Text>
+                        <Text style={styles.optionText}>Privacidad y Seguridad</Text>
                     </View>
                     <Ionicons name="chevron-forward" size={18} color="#999" />
                 </TouchableOpacity>
             </View>
 
             <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Preferences</Text>
+                <Text style={styles.sectionTitle}>Preferencias</Text>
 
                 <TouchableOpacity style={styles.option}>
                     <View style={styles.optionLeft}>
                         <Ionicons name="language" size={20} color="#333" />
-                        <Text style={styles.optionText}>Language</Text>
+                        <Text style={styles.optionText}>Idioma</Text>
                     </View>
                     <Ionicons name="chevron-forward" size={18} color="#999" />
                 </TouchableOpacity>
@@ -70,7 +69,7 @@ export default function Settings() {
 
             {/* Logout */}
             <TouchableOpacity style={styles.logout} onPress={() => router.replace("/")}>
-                <Text style={{ color: "red", fontWeight: "bold" }}>Logout</Text>
+                <Text style={{ color: "red", fontWeight: "bold" }}>Salir</Text>
             </TouchableOpacity>
         </View>
     );
