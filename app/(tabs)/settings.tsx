@@ -1,7 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 export default function Settings() {
+    const router = useRouter();
+
     return (
         <View style={styles.container}>
 
@@ -66,10 +69,9 @@ export default function Settings() {
             </View>
 
             {/* Logout */}
-            <TouchableOpacity style={styles.logout}>
+            <TouchableOpacity style={styles.logout} onPress={() => router.replace("/")}>
                 <Text style={{ color: "red", fontWeight: "bold" }}>Logout</Text>
             </TouchableOpacity>
-
         </View>
     );
 }
@@ -97,6 +99,10 @@ const styles = StyleSheet.create({
         alignItems: "center",
         marginBottom: 20,
         elevation: 3,
+        shadowColor: "#000",
+        shadowOpacity: 0.05,
+        shadowRadius: 10,
+
     },
     avatar: {
         width: 50,

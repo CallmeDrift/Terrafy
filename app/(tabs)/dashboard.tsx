@@ -1,10 +1,11 @@
+import { Ionicons } from "@expo/vector-icons";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 
 export default function Dashboard() {
   return (
     <ScrollView style={styles.container}>
       
-      <Text style={styles.title}> Bienvenido, Dorifuto</Text>
+      <Text style={styles.title}>Bienvenido, Dorifuto</Text>
       <Text style={styles.subtitle}>Estado de tu cultivo en tiempo real</Text>
 
       {/* Card de gráfica */}
@@ -18,23 +19,39 @@ export default function Dashboard() {
       {/* Métricas */}
       <View style={styles.grid}>
         
+        {/* pH */}
         <View style={styles.metricCard}>
-          <Text style={styles.metricTitle}>pH del suelo</Text>
+          <View style={styles.metricHeader}>
+            <Ionicons name="flask-outline" size={18} color="#16a34a" />
+            <Text style={styles.metricTitle}>pH del suelo</Text>
+          </View>
           <Text style={styles.metricValue}>6.8</Text>
         </View>
 
+        {/* Temperatura */}
         <View style={styles.metricCard}>
-          <Text style={styles.metricTitle}>Temp. del suelo</Text>
+          <View style={styles.metricHeader}>
+            <Ionicons name="thermometer-outline" size={18} color="#16a34a" />
+            <Text style={styles.metricTitle}>Temp. del suelo</Text>
+          </View>
           <Text style={styles.metricValue}>24°C</Text>
         </View>
 
+        {/* Oxígeno */}
         <View style={styles.metricCard}>
-          <Text style={styles.metricTitle}>Oxigeno en el aire</Text>
+          <View style={styles.metricHeader}>
+            <Ionicons name="leaf-outline" size={18} color="#16a34a" />
+            <Text style={styles.metricTitle}>Oxígeno en el aire</Text>
+          </View>
           <Text style={styles.metricValue}>60%</Text>
         </View>
 
+        {/* Humedad */}
         <View style={styles.metricCard}>
-          <Text style={styles.metricTitle}>Humedad</Text>
+          <View style={styles.metricHeader}>
+            <Ionicons name="water-outline" size={18} color="#16a34a" />
+            <Text style={styles.metricTitle}>Humedad</Text>
+          </View>
           <Text style={styles.metricValue}>65%</Text>
         </View>
 
@@ -48,7 +65,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#e9f5ec",
     padding: 20,
-    marginTop: 40
+    marginTop: 40,
   },
   title: {
     fontSize: 22,
@@ -89,10 +106,18 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     marginBottom: 15,
     elevation: 3,
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+  },
+  metricHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 5,
   },
   metricTitle: {
     color: "#666",
-    marginBottom: 5,
   },
   metricValue: {
     fontSize: 20,
