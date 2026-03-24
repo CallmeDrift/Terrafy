@@ -139,10 +139,10 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     padding: 20,
     elevation: 5,
-  },
+  },  
   logo: {
-    width: 100,
-    height: 100,
+    width: 120,
+    height: 120,
     alignSelf: "center",
     marginBottom: 10,
     borderRadius: 10,
