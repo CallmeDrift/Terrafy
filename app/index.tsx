@@ -14,7 +14,40 @@ export default function LoginScreen() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
+  const [errors, setErrors] = useState<any>({});
+
   const router = useRouter();
+
+  const validate = () => {
+    let newErrors: any = {};
+
+    // Email
+    if (!email.trim()) {
+      newErrors.email = "El correo es obligatorio";
+    } else if (!/\S+@\S+\.\S+/.test(email)) {
+      newErrors.email = "Correo inválido";
+    }
+
+    // Password
+    if (!password) {
+      newErrors.password = "La contraseña es obligatoria";
+    } else if (password.length < 6) {
+      newErrors.password = "Mínimo 6 caracteres";
+    }
+
+    setErrors(newErrors);
+
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleLogin = () => {
+    if (validate()) {
+      console.log("Login válido");
+
+      // LUIS, EL HPTA POST AAAAAAAAAAAAAAAAA
+      router.replace("/(tabs)/dashboard");
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -22,7 +55,7 @@ export default function LoginScreen() {
         
         {/* LOGO */}
         <Image
-          source={{ uri: "https://i.pinimg.com/control1/1200x/b6/30/a4/b630a41cdd8f721beaa99b540cd8c63d.jpg" }}
+          source={{ uri: "https://i.ibb.co/XfrJp2yc/chile-morrol.png" }}
           style={styles.logo}
         />
 
@@ -32,15 +65,21 @@ export default function LoginScreen() {
         {/* Email */}
         <Text style={styles.label}>Correo</Text>
         <TextInput
-          style={styles.input}
+          style={[styles.input, errors.email && styles.inputError]}
           placeholder="tu.email@ejemplo.com"
           value={email}
           onChangeText={setEmail}
         />
+        {errors.email && <Text style={styles.error}>{errors.email}</Text>}
 
         {/* Password */}
         <Text style={styles.label}>Contraseña</Text>
-        <View style={styles.passwordContainer}>
+        <View
+          style={[
+            styles.passwordContainer,
+            errors.password && styles.inputError,
+          ]}
+        >
           <TextInput
             style={styles.passwordInput}
             placeholder="Ingresa tu contraseña"
@@ -55,6 +94,9 @@ export default function LoginScreen() {
             </Text>
           </TouchableOpacity>
         </View>
+        {errors.password && (
+          <Text style={styles.error}>{errors.password}</Text>
+        )}
 
         {/* Forgot */}
         <Text style={styles.forgot}>¿Olvidaste tu contraseña?</Text>
@@ -62,7 +104,7 @@ export default function LoginScreen() {
         {/* Login Button */}
         <TouchableOpacity
           style={styles.loginButton}
-          onPress={() => router.replace("/(tabs)/dashboard")}
+          onPress={handleLogin}
         >
           <Text style={styles.loginText}>Iniciar sesión</Text>
         </TouchableOpacity>
@@ -71,13 +113,18 @@ export default function LoginScreen() {
         <Text style={styles.or}>o</Text>
 
         {/* Create Account */}
-        <TouchableOpacity style={styles.createButton}>
+        <TouchableOpacity
+          style={styles.createButton}
+          onPress={() => router.push("/register")}
+        >
           <Text style={styles.createText}>Crear cuenta</Text>
         </TouchableOpacity>
+
       </View>
     </View>
   );
 }
+
 
 const styles = StyleSheet.create({
   container: {
@@ -92,10 +139,10 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     padding: 20,
     elevation: 5,
-  },
+  },  
   logo: {
-    width: 100,
-    height: 100,
+    width: 120,
+    height: 120,
     alignSelf: "center",
     marginBottom: 10,
     borderRadius: 10,
@@ -168,4 +215,15 @@ const styles = StyleSheet.create({
     color: "#16a34a",
     fontWeight: "bold",
   },
+  inputError: {
+  borderWidth: 1,
+  borderColor: "red",
+},
+
+error: {
+  color: "red",
+  fontSize: 12,
+  marginTop: 3,
+},
+
 });
