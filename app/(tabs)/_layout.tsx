@@ -25,9 +25,9 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="register"
+        name="new-data"
         options={{
-          title: "Registro",
+          title: "Nuevos datos",
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="add-circle-outline" size={size} color={color} />
           ),
