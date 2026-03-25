@@ -1,3 +1,4 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
@@ -40,19 +41,41 @@ export default function LoginScreen() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     if (validate()) {
-      console.log("Login válido");
+      try {
+        const response = await fetch("http://192.168.1.15:3000/api/users/login", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            email: email,
+            password: password,
+          }),
+        });
 
-      // LUIS, EL HPTA POST AAAAAAAAAAAAAAAAA
-      router.replace("/(tabs)/dashboard");
+        const data = await response.json();
+        if (!response.ok) {
+          console.log("Error del servidor:", data);
+          alert(data.message || "Credenciales incorrectas");
+          return;
+        }
+        console.log("Login exitoso:", data);
+        await AsyncStorage.setItem("token", data.token);
+        await AsyncStorage.setItem("user", JSON.stringify(data.user));
+        router.replace("/(tabs)/dashboard");
+      } catch (error) {
+        console.error("Error en la petición:", error);
+        alert("No se pudo conectar con el servidor");
+      }
     }
   };
 
   return (
     <View style={styles.container}>
       <View style={styles.card}>
-        
+
         {/* LOGO */}
         <Image
           source={{ uri: "https://i.ibb.co/XfrJp2yc/chile-morrol.png" }}
@@ -139,7 +162,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     padding: 20,
     elevation: 5,
-  },  
+  },
   logo: {
     width: 120,
     height: 120,
@@ -216,14 +239,14 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
   inputError: {
-  borderWidth: 1,
-  borderColor: "red",
-},
+    borderWidth: 1,
+    borderColor: "red",
+  },
 
-error: {
-  color: "red",
-  fontSize: 12,
-  marginTop: 3,
-},
+  error: {
+    color: "red",
+    fontSize: 12,
+    marginTop: 3,
+  },
 
 });

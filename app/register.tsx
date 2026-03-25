@@ -22,7 +22,7 @@ export default function Register() {
     const validate = () => {
         let newErrors: any = {};
 
-        if (!name.trim()) {newErrors.name = "El nombre es obligatorio";}
+        if (!name.trim()) { newErrors.name = "El nombre es obligatorio"; }
         if (!email.trim()) { newErrors.email = "El correo es obligatorio"; }
         else if (!/\S+@\S+\.\S+/.test(email)) { newErrors.email = "Correo inválido"; }
         if (!password) { newErrors.password = "La contraseña es obligatoria"; }
@@ -33,17 +33,39 @@ export default function Register() {
         return Object.keys(newErrors).length === 0;
     };
 
-    const handleRegister = () => {
+    const handleRegister = async () => {
         if (validate()) {
-            console.log("Registro válido");
+            try {
+                const response = await fetch("http://192.168.1.15:3000/api/users", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                        name: name,
+                        email: email,
+                        password: password,
+                    }),
+                });
 
-            // Luis, recuerda implementar el backend aca
-            // pq hasta ahora no has hecho es una mondá
-            // solo manda el post al servidor y ya, no es tan difícil
+                const data = await response.json();
 
-            router.replace("/");
+                if (!response.ok) {
+                    console.log("Error del servidor:", data);
+                    alert(data.message || "Error al registrarse");
+                    return;
+                }
+
+                console.log("Usuario registrado:", data);
+                router.replace("/");
+
+            } catch (error) {
+                console.error("Error en la petición:", error);
+                alert("No se pudo conectar con el servidor");
+            }
         }
     };
+
 
     return (
         <ScrollView contentContainerStyle={styles.container}>
