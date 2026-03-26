@@ -2,12 +2,42 @@ import { HapticTab } from '@/components/haptic-tab';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Ionicons } from "@expo/vector-icons";
-import { Tabs } from 'expo-router';
-import React from 'react';
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Tabs, useRouter } from 'expo-router';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, View } from "react-native";
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
+  const router = useRouter();
+  const [loading, setLoading] = useState(true);
 
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const token = await AsyncStorage.getItem("token");
+        if (!token) {
+          router.replace("/");
+          return;
+        }
+      } catch (error) {
+        console.error("Error verifying session:", error);
+        router.replace("/");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    checkAuth();
+  }, []);
+
+  if (loading) {
+    return (
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+        <ActivityIndicator size="large" color="#16a34a" />
+      </View>
+    );
+  }
   return (
     <Tabs
       screenOptions={{
@@ -38,7 +68,7 @@ export default function TabLayout() {
         options={{
           title: "Historial",
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="time" size={size} color={color} />
+            <Ionicons name="time-outline" size={size} color={color} />
           ),
         }}
       />
@@ -47,7 +77,7 @@ export default function TabLayout() {
         options={{
           title: "Configuración",
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="settings" size={size} color={color} />
+            <Ionicons name="settings-outline" size={size} color={color} />
           ),
         }}
       />

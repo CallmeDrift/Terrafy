@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { router, useRouter } from "expo-router";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 export default function Settings() {
@@ -19,7 +20,9 @@ export default function Settings() {
                 <View>
                     <Text style={styles.name}>Dorifuto megumin</Text>
                     <Text style={styles.email}>dorifuto@example.com</Text>
-                    <Text style={styles.edit}>Editar Perfil</Text>
+                    <TouchableOpacity onPress={() => router.push("../(options)/edit-user")}>
+                        <Text style={styles.edit}>Editar Perfil</Text>
+                    </TouchableOpacity>
                 </View>
             </View>
 
@@ -68,12 +71,24 @@ export default function Settings() {
             </View>
 
             {/* Logout */}
-            <TouchableOpacity style={styles.logout} onPress={() => router.replace("/")}>
+            <TouchableOpacity style={styles.logout} onPress={handleLogout}>
                 <Text style={{ color: "red", fontWeight: "bold" }}>Salir</Text>
             </TouchableOpacity>
+
         </View>
     );
 }
+
+const handleLogout = async () => {
+    try {
+        await AsyncStorage.removeItem("token");
+        await AsyncStorage.removeItem("user");
+
+        router.replace("/");
+    } catch (error) {
+        console.error("Error closing session:", error);
+    }
+};
 
 const styles = StyleSheet.create({
     container: {
