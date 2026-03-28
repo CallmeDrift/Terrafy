@@ -1,45 +1,86 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 
-// me dio pereza revisar esto, mañana veo que hizo el chismoso jeje
 export default function RegisterSystem() {
   const router = useRouter();
 
   const [name, setName] = useState("");
   const [location, setLocation] = useState("");
-  const [type, setType] = useState("");
+  const [description, setDescription] = useState("");
+
   const [errors, setErrors] = useState<any>({});
+  const [loading, setLoading] = useState(false);
 
   const validate = () => {
     let newErrors: any = {};
 
     if (!name.trim()) newErrors.name = "Nombre obligatorio";
     if (!location.trim()) newErrors.location = "Ubicación obligatoria";
-    if (!type.trim()) newErrors.type = "Tipo obligatorio";
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSave = () => {
-    if (validate()) {
+  const handleSave = async () => {
+    if (!validate()) return;
+
+    try {
+      setLoading(true);
+
+      const token = await AsyncStorage.getItem("token");
+      const userString = await AsyncStorage.getItem("user");
+
+      if (!token || !userString) {
+        Alert.alert("Error", "Sesión inválida");
+        return;
+      }
+
+      const user = JSON.parse(userString);
+
+      const response = await fetch(
+        "http://192.168.1.13:3000/api/growing-systems",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            userId: user.userId,
+            name,
+            location,
+            description,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Error en la creación");
+      }
       console.log("Sistema registrado");
+      Alert.alert("Éxito", "Sistema creado correctamente");
+
       router.back();
+    } catch (error) {
+      Alert.alert("Error", "No se pudo guardar. Intenta nuevamente");
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <View style={styles.card}>
-        
         <Text style={styles.title}>Registrar sistema</Text>
 
         {/* Nombre */}
@@ -60,23 +101,29 @@ export default function RegisterSystem() {
           value={location}
           onChangeText={setLocation}
         />
-        {errors.location && <Text style={styles.error}>{errors.location}</Text>}
+        {errors.location && (
+          <Text style={styles.error}>{errors.location}</Text>
+        )}
 
-        {/* Tipo */}
-        <Text style={styles.label}>Tipo de cultivo</Text>
+        {/* Descripción */}
+        <Text style={styles.label}>Descripción (opcional)</Text>
         <TextInput
-          style={[styles.input, errors.type && styles.errorInput]}
-          placeholder="Ej: Hidropónico"
-          value={type}
-          onChangeText={setType}
+          style={styles.input}
+          placeholder="Descripción del sistema"
+          value={description}
+          onChangeText={setDescription}
         />
-        {errors.type && <Text style={styles.error}>{errors.type}</Text>}
 
         {/* Botón */}
-        <TouchableOpacity style={styles.button} onPress={handleSave}>
-          <Text style={styles.buttonText}>Guardar</Text>
+        <TouchableOpacity
+          style={styles.button}
+          onPress={handleSave}
+          disabled={loading}
+        >
+          <Text style={styles.buttonText}>
+            {loading ? "Guardando..." : "Guardar"}
+          </Text>
         </TouchableOpacity>
-
       </View>
     </ScrollView>
   );

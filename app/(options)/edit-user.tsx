@@ -66,7 +66,7 @@ export default function EditUser() {
             const user = JSON.parse(userStored);
 
             const response = await fetch(
-                `http://192.168.1.15:3000/api/users/${user.userId}`,
+                `http://192.168.1.13:3000/api/users/${user.userId}`,
                 {
                     method: "PATCH",
                     headers: {

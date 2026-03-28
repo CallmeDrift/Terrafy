@@ -44,7 +44,7 @@ export default function LoginScreen() {
   const handleLogin = async () => {
     if (validate()) {
       try {
-        const response = await fetch("http://192.168.1.15:3000/api/users/login", {
+        const response = await fetch("http://192.168.1.13:3000/api/users/login", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",

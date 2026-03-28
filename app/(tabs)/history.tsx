@@ -1,70 +1,106 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useState } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useFocusEffect } from "expo-router";
+import { useCallback, useState } from "react";
 import {
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 
 export default function History() {
-  const [openIndex, setOpenIndex] = useState<number | null>(0);
+  const [openIndex, setOpenIndex] = useState<number | null>(null);
+  const [data, setData] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
 
   const toggle = (index: number) => {
     setOpenIndex(openIndex === index ? null : index);
   };
 
-  const data = [
-    {
-      zone: "Zone B3",
-      date: "2026-02-21 at 14:30",
-      ph: "6.8 pH",
-      temp: "24 °C",
-      oxygen: "20.9 %",
-      humidity: "65 %",
-    },
-    {
-      zone: "Zone A1",
-      date: "2026-02-21 at 09:15",
-      ph: "7.1",
-      temp: "22",
-      oxygen: "21",
-      humidity: "72",
-    },
-    {
-      zone: "Zone B3",
-      date: "2026-02-20 at 16:45",
-      ph: "6.9",
-      temp: "26",
-      oxygen: "20.8",
-      humidity: "58",
-    },
-  ];
+  const fetchSystems = async () => {
+    try {
+      setLoading(true);
+
+      const token = await AsyncStorage.getItem("token");
+      const userString = await AsyncStorage.getItem("user");
+
+      if (!token || !userString) {
+        Alert.alert("Error", "Sesión inválida");
+        return;
+      }
+
+      const user = JSON.parse(userString);
+
+      const response = await fetch(
+        `http://192.168.1.13:3000/api/growing-systems/${user.userId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Error al obtener datos");
+      }
+
+      const result = await response.json();
+      console.log("Sistemas obtenidos:", result);
+
+      setData(result.systems);
+    } catch (error) {
+      Alert.alert("Error", "No se pudo cargar el historial");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchSystems();
+    }, [])
+  );
 
   return (
     <ScrollView style={styles.container}>
       <Text style={styles.title}>Historial</Text>
-      <Text style={styles.subtitle}>Ver mediciones pasadas</Text>
+      <Text style={styles.subtitle}>Sistemas de cultivo</Text>
+
+      {loading && <ActivityIndicator size="large" />}
+
+      {!loading && data.length === 0 && (
+        <Text style={{ textAlign: "center", marginTop: 20 }}>
+          No hay sistemas registrados
+        </Text>
+      )}
 
       {data.map((item, index) => {
         const isOpen = openIndex === index;
 
         return (
-          <View key={index} style={styles.card}>
-            
+          <View key={item.systemId} style={styles.card}>
             <TouchableOpacity
               style={styles.header}
               onPress={() => toggle(index)}
             >
               <View style={styles.headerLeft}>
                 <View style={styles.iconBox}>
-                  <Ionicons name="calendar-outline" size={18} color="#16a34a" />
+                  <Ionicons
+                    name="leaf-outline"
+                    size={18}
+                    color="#16a34a"
+                  />
                 </View>
 
                 <View>
-                  <Text style={styles.zone}>{item.zone}</Text>
-                  <Text style={styles.date}>{item.date}</Text>
+                  <Text style={styles.zone}>{item.name}</Text>
+                  <Text style={styles.date}>
+                    {new Date(item.creationDate).toLocaleString()}
+                  </Text>
                 </View>
               </View>
 
@@ -77,46 +113,27 @@ export default function History() {
 
             {isOpen ? (
               <View style={styles.details}>
-                
                 <View style={styles.row}>
-                  <View style={styles.rowLeft}>
-                    <Ionicons name="flask-outline" size={16} color="#16a34a" />
-                    <Text>pH del suelo</Text>
-                  </View>
-                  <Text style={styles.value}>{item.ph}</Text>
+                  <Text>Ubicación</Text>
+                  <Text style={styles.value}>{item.ubication}</Text>
                 </View>
 
                 <View style={styles.row}>
-                  <View style={styles.rowLeft}>
-                    <Ionicons name="thermometer-outline" size={16} color="#f97316" />
-                    <Text>Temperatura del suelo</Text>
-                  </View>
-                  <Text style={styles.value}>{item.temp}</Text>
+                  <Text>Descripción</Text>
+                  <Text style={styles.value}>
+                    {item.description || "Sin descripción"}
+                  </Text>
                 </View>
 
                 <View style={styles.row}>
-                  <View style={styles.rowLeft}>
-                    <Ionicons name="leaf-outline" size={16} color="#3b82f6" />
-                    <Text>Oxígeno en el aire</Text>
-                  </View>
-                  <Text style={styles.value}>{item.oxygen}</Text>
+                  <Text>Estado</Text>
+                  <Text style={styles.value}>{item.status}</Text>
                 </View>
-
-                <View style={styles.row}>
-                  <View style={styles.rowLeft}>
-                    <Ionicons name="water-outline" size={16} color="#06b6d4" />
-                    <Text>Humedad</Text>
-                  </View>
-                  <Text style={styles.value}>{item.humidity}</Text>
-                </View>
-
               </View>
             ) : (
               <View style={styles.miniRow}>
-                <Text>{item.ph}</Text>
-                <Text>{item.temp}</Text>
-                <Text>{item.oxygen}</Text>
-                <Text>{item.humidity}</Text>
+                <Text>{item.ubication}</Text>
+                <Text>{item.status}</Text>
               </View>
             )}
           </View>
@@ -181,12 +198,6 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
-  },
-  rowLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
   },
   value: {
     fontWeight: "bold",
@@ -197,6 +208,5 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     marginTop: 15,
-    color: "#999",
   },
 });
