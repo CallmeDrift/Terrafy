@@ -1,12 +1,13 @@
+import { API_URL } from "@/constants/router";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 
 export default function Register() {
@@ -47,7 +48,7 @@ export default function Register() {
   const handleRegister = async () => {
     if (validate()) {
       try {
-        const response = await fetch("http://192.168.1.8:3000/api/users", {
+        const response = await fetch(`${API_URL}/users`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",

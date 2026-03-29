@@ -1,3 +1,4 @@
+import { API_URL } from "@/constants/router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import { useState } from "react";
@@ -48,7 +49,7 @@ export default function RegisterSystem() {
       const user = JSON.parse(userString);
 
       const response = await fetch(
-        "http://192.168.1.8:3000/api/growing-systems",
+        `${API_URL}/growing-systems`,
         {
           method: "POST",
           headers: {

@@ -1,13 +1,14 @@
+import { API_URL } from "@/constants/router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 
 export default function EditUser() {
@@ -66,7 +67,7 @@ export default function EditUser() {
       const user = JSON.parse(userStored);
 
       const response = await fetch(
-        `http://192.168.1.8:3000/api/users/${user.userId}`,
+        `${API_URL}/users/${user.userId}`,
         {
           method: "PATCH",
           headers: {

@@ -1,6 +1,7 @@
+import { API_URL } from "@/constants/router";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useFocusEffect } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
@@ -36,7 +37,7 @@ export default function History() {
       const user = JSON.parse(userString);
 
       const response = await fetch(
-        `http://192.168.1.8:3000/api/growing-systems/${user.userId}`,
+        `${API_URL}/growing-systems/${user.userId}`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -100,11 +101,30 @@ export default function History() {
                 </View>
               </View>
 
-              <Ionicons
-                name={isOpen ? "remove" : "add"}
-                size={20}
-                color="#16a34a"
-              />
+              <View style={{ flexDirection: "row", gap: 10 }}>
+                <TouchableOpacity
+                  onPress={() =>
+                    router.push({
+                      pathname: "/(options)/edit-system",
+                      params: {
+                        systemId: item.systemId,
+                        name: item.name,
+                        location: item.ubication,
+                        description: item.description || "",
+                      },
+                    })
+                  }
+                >
+                  <Ionicons name="pencil" size={20} color="#16a34a" />
+                </TouchableOpacity>
+
+                {/* Expandir */}
+                <Ionicons
+                  name={isOpen ? "remove" : "add"}
+                  size={20}
+                  color="#16a34a"
+                />
+              </View>
             </TouchableOpacity>
 
             {isOpen ? (

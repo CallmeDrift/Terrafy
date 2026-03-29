@@ -1,3 +1,4 @@
+import { API_URL } from "@/constants/router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import { useState } from "react";
@@ -45,7 +46,7 @@ export default function LoginScreen() {
     if (validate()) {
       try {
         const response = await fetch(
-          "http://192.168.1.8:3000/api/users/login",
+          `${API_URL}/users/login`,
           {
             method: "POST",
             headers: {
