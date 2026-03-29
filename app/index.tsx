@@ -44,16 +44,19 @@ export default function LoginScreen() {
   const handleLogin = async () => {
     if (validate()) {
       try {
-        const response = await fetch("http://192.168.1.13:3000/api/users/login", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
+        const response = await fetch(
+          "http://192.168.1.8:3000/api/users/login",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              email: email,
+              password: password,
+            }),
           },
-          body: JSON.stringify({
-            email: email,
-            password: password,
-          }),
-        });
+        );
 
         const data = await response.json();
         if (!response.ok) {
@@ -71,12 +74,10 @@ export default function LoginScreen() {
       }
     }
   };
-  
 
   return (
     <View style={styles.container}>
       <View style={styles.card}>
-
         {/* LOGO */}
         <Image
           source={{ uri: "https://i.ibb.co/XfrJp2yc/chile-morrol.png" }}
@@ -118,18 +119,13 @@ export default function LoginScreen() {
             </Text>
           </TouchableOpacity>
         </View>
-        {errors.password && (
-          <Text style={styles.error}>{errors.password}</Text>
-        )}
+        {errors.password && <Text style={styles.error}>{errors.password}</Text>}
 
         {/* Forgot */}
         <Text style={styles.forgot}>¿Olvidaste tu contraseña?</Text>
 
         {/* Login Button */}
-        <TouchableOpacity
-          style={styles.loginButton}
-          onPress={handleLogin}
-        >
+        <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
           <Text style={styles.loginText}>Iniciar sesión</Text>
         </TouchableOpacity>
 
@@ -143,12 +139,10 @@ export default function LoginScreen() {
         >
           <Text style={styles.createText}>Crear cuenta</Text>
         </TouchableOpacity>
-
       </View>
     </View>
   );
 }
-
 
 const styles = StyleSheet.create({
   container: {
@@ -249,5 +243,4 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 3,
   },
-
 });

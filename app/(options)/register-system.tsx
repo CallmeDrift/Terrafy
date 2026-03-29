@@ -48,7 +48,7 @@ export default function RegisterSystem() {
       const user = JSON.parse(userString);
 
       const response = await fetch(
-        "http://192.168.1.13:3000/api/growing-systems",
+        "http://192.168.1.8:3000/api/growing-systems",
         {
           method: "POST",
           headers: {
@@ -61,7 +61,7 @@ export default function RegisterSystem() {
             location,
             description,
           }),
-        }
+        },
       );
 
       if (!response.ok) {
@@ -101,9 +101,7 @@ export default function RegisterSystem() {
           value={location}
           onChangeText={setLocation}
         />
-        {errors.location && (
-          <Text style={styles.error}>{errors.location}</Text>
-        )}
+        {errors.location && <Text style={styles.error}>{errors.location}</Text>}
 
         {/* Descripción */}
         <Text style={styles.label}>Descripción (opcional)</Text>

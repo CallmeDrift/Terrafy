@@ -36,12 +36,12 @@ export default function History() {
       const user = JSON.parse(userString);
 
       const response = await fetch(
-        `http://192.168.1.13:3000/api/growing-systems/${user.userId}`,
+        `http://192.168.1.8:3000/api/growing-systems/${user.userId}`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
           },
-        }
+        },
       );
 
       if (!response.ok) {
@@ -62,7 +62,7 @@ export default function History() {
   useFocusEffect(
     useCallback(() => {
       fetchSystems();
-    }, [])
+    }, []),
   );
 
   return (
@@ -89,11 +89,7 @@ export default function History() {
             >
               <View style={styles.headerLeft}>
                 <View style={styles.iconBox}>
-                  <Ionicons
-                    name="leaf-outline"
-                    size={18}
-                    color="#16a34a"
-                  />
+                  <Ionicons name="leaf-outline" size={18} color="#16a34a" />
                 </View>
 
                 <View>
