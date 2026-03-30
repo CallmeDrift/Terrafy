@@ -1,3 +1,4 @@
+import { API_URL } from "@/constants/router";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
@@ -34,11 +35,55 @@ export default function Settings() {
     }
   };
 
+  const handleDeleteAccount = async () => {
+    const confirmed = confirm(
+      "¿Estás seguro de que deseas eliminar tu cuenta? Esta acción no se puede deshacer.",
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      const rawToken = await AsyncStorage.getItem("token");
+      const token = rawToken ? rawToken.replace(/"/g, "") : null;
+
+      const userId = user?.userId;
+
+      if (!userId || !token) {
+        alert("No se pudo obtener el usuario o el token");
+        return;
+      }
+
+      const response = await fetch(`${API_URL}/users/${userId}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        alert("No se pudo eliminar la cuenta");
+        return;
+      }
+
+      alert("Cuenta eliminada correctamente");
+
+      await AsyncStorage.removeItem("token");
+      await AsyncStorage.removeItem("user");
+
+      router.replace("/");
+    } catch (error) {
+      console.error("Error deleting account:", error);
+      alert("Error inesperado");
+    }
+  };
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Configuraciones</Text>
 
-      {/* Perfil */}
       <View style={styles.profileCard}>
         <View style={styles.avatar}>
           <Text style={{ color: "#fff", fontSize: 20 }}>👤</Text>
@@ -58,7 +103,6 @@ export default function Settings() {
         </View>
       </View>
 
-      {/* Opciones */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>cuenta</Text>
 
@@ -67,7 +111,6 @@ export default function Settings() {
             <Ionicons name="person-outline" size={20} color="#333" />
             <Text style={styles.optionText}>Información Personal</Text>
           </View>
-
           <Ionicons name="chevron-forward" size={18} color="#999" />
         </TouchableOpacity>
 
@@ -91,16 +134,17 @@ export default function Settings() {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Preferencias</Text>
 
-        <TouchableOpacity style={styles.option}>
+        <TouchableOpacity style={styles.option} onPress={handleDeleteAccount}>
           <View style={styles.optionLeft}>
-            <Ionicons name="language" size={20} color="#333" />
-            <Text style={styles.optionText}>Idioma</Text>
+            <Ionicons name="trash-outline" size={20} color="red" />
+            <Text style={[styles.optionText, { color: "red" }]}>
+              Eliminar cuenta
+            </Text>
           </View>
           <Ionicons name="chevron-forward" size={18} color="#999" />
         </TouchableOpacity>
       </View>
 
-      {/* Logout */}
       <TouchableOpacity style={styles.logout} onPress={handleLogout}>
         <Text style={{ color: "red", fontWeight: "bold" }}>Salir</Text>
       </TouchableOpacity>
@@ -118,10 +162,6 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 22,
     fontWeight: "bold",
-  },
-  subtitle: {
-    color: "#666",
-    marginBottom: 15,
   },
   profileCard: {
     flexDirection: "row",
