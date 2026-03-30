@@ -3,7 +3,14 @@ import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import {
+  Alert,
+  Platform,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 
 export default function Settings() {
   const router = useRouter();
@@ -35,14 +42,37 @@ export default function Settings() {
     }
   };
 
-  const handleDeleteAccount = async () => {
-    const confirmed = confirm(
-      "¿Estás seguro de que deseas eliminar tu cuenta? Esta acción no se puede deshacer.",
-    );
-
-    if (!confirmed) {
-      return;
+  // 🔥 CONFIRMACIÓN MULTIPLATAFORMA
+  const confirmDelete = async () => {
+    if (Platform.OS === "web") {
+      return confirm(
+        "¿Estás seguro de que deseas eliminar tu cuenta? Esta acción no se puede deshacer.",
+      );
     }
+
+    return new Promise<boolean>((resolve) => {
+      Alert.alert(
+        "Eliminar cuenta",
+        "¿Estás seguro de que deseas eliminar tu cuenta? Esta acción no se puede deshacer.",
+        [
+          {
+            text: "Cancelar",
+            style: "cancel",
+            onPress: () => resolve(false),
+          },
+          {
+            text: "Eliminar",
+            style: "destructive",
+            onPress: () => resolve(true),
+          },
+        ],
+      );
+    });
+  };
+
+  const handleDeleteAccount = async () => {
+    const confirmed = await confirmDelete();
+    if (!confirmed) return;
 
     try {
       const rawToken = await AsyncStorage.getItem("token");
@@ -50,8 +80,12 @@ export default function Settings() {
 
       const userId = user?.userId;
 
+      console.log("USER:", user);
+      console.log("USER ID:", userId);
+      console.log("TOKEN:", token);
+
       if (!userId || !token) {
-        alert("No se pudo obtener el usuario o el token");
+        Alert.alert("Error", "No se pudo obtener el usuario o el token");
         return;
       }
 
@@ -63,12 +97,17 @@ export default function Settings() {
         },
       });
 
+      console.log("STATUS:", response.status);
+
       if (!response.ok) {
-        alert("No se pudo eliminar la cuenta");
+        const errorText = await response.text();
+        console.log("ERROR:", errorText);
+
+        Alert.alert("Error", "No se pudo eliminar la cuenta");
         return;
       }
 
-      alert("Cuenta eliminada correctamente");
+      Alert.alert("Éxito", "Cuenta eliminada correctamente");
 
       await AsyncStorage.removeItem("token");
       await AsyncStorage.removeItem("user");
@@ -76,7 +115,7 @@ export default function Settings() {
       router.replace("/");
     } catch (error) {
       console.error("Error deleting account:", error);
-      alert("Error inesperado");
+      Alert.alert("Error", "Ocurrió un error inesperado");
     }
   };
 

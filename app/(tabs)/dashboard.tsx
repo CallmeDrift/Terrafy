@@ -1,11 +1,31 @@
 import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useEffect, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 
 export default function Dashboard() {
+  const [user, setUser] = useState<any>(null);
+
+  useEffect(() => {
+    const loadUser = async () => {
+      try {
+        const storedUser = await AsyncStorage.getItem("user");
+        if (storedUser) {
+          setUser(JSON.parse(storedUser));
+        }
+      } catch (error) {
+        console.error("Error loading user:", error);
+      }
+    };
+
+    loadUser();
+  }, []);
+
   return (
     <ScrollView style={styles.container}>
-      
-      <Text style={styles.title}>Bienvenido, Dorifuto</Text>
+      {/* 👇 dinámico */}
+      <Text style={styles.title}>Bienvenido, {user?.name || "Usuario"}</Text>
+
       <Text style={styles.subtitle}>Estado de tu cultivo en tiempo real</Text>
 
       {/* Card de gráfica */}
@@ -18,7 +38,6 @@ export default function Dashboard() {
 
       {/* Métricas */}
       <View style={styles.grid}>
-        
         {/* pH */}
         <View style={styles.metricCard}>
           <View style={styles.metricHeader}>
@@ -54,7 +73,6 @@ export default function Dashboard() {
           </View>
           <Text style={styles.metricValue}>65%</Text>
         </View>
-
       </View>
     </ScrollView>
   );

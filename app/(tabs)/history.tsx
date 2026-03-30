@@ -6,6 +6,7 @@ import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -60,6 +61,74 @@ export default function History() {
     }
   };
 
+  // 🔥 CONFIRMACIÓN MULTIPLATAFORMA
+  const confirmDelete = async () => {
+    if (Platform.OS === "web") {
+      return confirm("¿Estás seguro de eliminar este sistema?");
+    }
+
+    return new Promise<boolean>((resolve) => {
+      Alert.alert(
+        "Eliminar sistema",
+        "¿Estás seguro de eliminar este sistema?",
+        [
+          {
+            text: "Cancelar",
+            style: "cancel",
+            onPress: () => resolve(false),
+          },
+          {
+            text: "Eliminar",
+            style: "destructive",
+            onPress: () => resolve(true),
+          },
+        ],
+      );
+    });
+  };
+
+  const handleDeleteSystem = async (systemId: number) => {
+    console.log("CLICK DELETE SYSTEM");
+
+    const confirmed = await confirmDelete();
+    if (!confirmed) return;
+
+    try {
+      const token = await AsyncStorage.getItem("token");
+
+      if (!token) {
+        Alert.alert("Error", "Sesión inválida");
+        return;
+      }
+
+      console.log("DELETE SYSTEM ID:", systemId);
+
+      const response = await fetch(`${API_URL}/growing-systems/${systemId}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      console.log("STATUS:", response.status);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.log("ERROR:", errorText);
+
+        Alert.alert("Error", "No se pudo eliminar el sistema");
+        return;
+      }
+
+      Alert.alert("Éxito", "Sistema eliminado");
+
+      fetchSystems();
+    } catch (error) {
+      console.error("Error deleting system:", error);
+      Alert.alert("Error", "Ocurrió un error inesperado");
+    }
+  };
+
   useFocusEffect(
     useCallback(() => {
       fetchSystems();
@@ -102,6 +171,7 @@ export default function History() {
               </View>
 
               <View style={{ flexDirection: "row", gap: 10 }}>
+                {/* EDITAR */}
                 <TouchableOpacity
                   onPress={() =>
                     router.push({
@@ -118,7 +188,14 @@ export default function History() {
                   <Ionicons name="pencil" size={20} color="#16a34a" />
                 </TouchableOpacity>
 
-                {/* Expandir */}
+                {/* ELIMINAR */}
+                <TouchableOpacity
+                  onPress={() => handleDeleteSystem(item.systemId)}
+                >
+                  <Ionicons name="trash-outline" size={20} color="red" />
+                </TouchableOpacity>
+
+                {/* EXPANDIR */}
                 <Ionicons
                   name={isOpen ? "remove" : "add"}
                   size={20}
