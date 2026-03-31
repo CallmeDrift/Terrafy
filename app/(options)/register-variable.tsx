@@ -40,7 +40,6 @@ export default function RegisterVariable() {
     Alert.alert("Información", message);
   };
 
-  // 🔥 Traer sistemas
   const fetchSystems = async () => {
     try {
       const token = await AsyncStorage.getItem("token");
