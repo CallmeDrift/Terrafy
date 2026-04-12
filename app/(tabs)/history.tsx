@@ -153,17 +153,23 @@ export default function History() {
 
         return (
           <View key={item.systemId} style={styles.card}>
-            <TouchableOpacity
-              style={styles.header}
-              onPress={() => toggle(index)}
-            >
+            <View style={styles.header}>
               <View style={styles.headerLeft}>
                 <View style={styles.iconBox}>
                   <Ionicons name="leaf-outline" size={18} color="#16a34a" />
                 </View>
 
                 <View>
-                  <Text style={styles.zone}>{item.name}</Text>
+                  <TouchableOpacity
+                    onPress={() =>
+                      router.push({
+                        pathname: "/(options)/detailed-system",
+                        params: { systemId: String(item.systemId) },
+                      })
+                    }
+                  >
+                    <Text style={styles.zone}>{item.name}</Text>
+                  </TouchableOpacity>
                   <Text style={styles.date}>
                     {new Date(item.creationDate).toLocaleString()}
                   </Text>
@@ -196,13 +202,15 @@ export default function History() {
                 </TouchableOpacity>
 
                 {/* EXPANDIR */}
-                <Ionicons
-                  name={isOpen ? "remove" : "add"}
-                  size={20}
-                  color="#16a34a"
-                />
+                <TouchableOpacity onPress={() => toggle(index)}>
+                  <Ionicons
+                    name={isOpen ? "remove" : "add"}
+                    size={20}
+                    color="#16a34a"
+                  />
+                </TouchableOpacity>
               </View>
-            </TouchableOpacity>
+            </View>
 
             {isOpen ? (
               <View style={styles.details}>
@@ -278,6 +286,8 @@ const styles = StyleSheet.create({
   zone: {
     fontWeight: "bold",
     fontSize: 15,
+    color: "#166534",
+    textDecorationLine: "underline",
   },
   date: {
     color: "#888",

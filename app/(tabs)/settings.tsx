@@ -42,7 +42,6 @@ export default function Settings() {
     }
   };
 
-  // 🔥 CONFIRMACIÓN MULTIPLATAFORMA
   const confirmDelete = async () => {
     if (Platform.OS === "web") {
       return confirm(
