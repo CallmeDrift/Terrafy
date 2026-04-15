@@ -4,14 +4,14 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
-	ActivityIndicator,
-	Alert,
-	Platform,
-	ScrollView,
-	StyleSheet,
-	Text,
-	TouchableOpacity,
-	View,
+    ActivityIndicator,
+    Alert,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 
 type AgronomicVariable = {
@@ -323,6 +323,25 @@ export default function DetailedSystem() {
 									<Text style={styles.value}>{variable.status || "-"}</Text>
 								</View>
 
+								<TouchableOpacity
+									style={styles.historyButton}
+									onPress={() =>
+										router.push({
+											pathname: "/(options)/variable-history",
+											params: {
+												systemId: String(systemId || detail?.systemId || detail?.id || ""),
+												variableId: String(getVariableId(variable) || ""),
+												variableName: variable.name || "Variable",
+												systemName: detail?.name || "Sistema",
+											},
+										})
+									}
+									disabled={!getVariableId(variable)}
+								>
+									<Ionicons name="analytics-outline" size={16} color="#166534" />
+									<Text style={styles.historyButtonText}>Ver historial</Text>
+								</TouchableOpacity>
+
 								<Text style={styles.variableDescription}>
 									{variable.description || "Sin descripción"}
 								</Text>
@@ -441,5 +460,21 @@ const styles = StyleSheet.create({
 	variableDescription: {
 		marginTop: 6,
 		color: "#4b5563",
+	},
+	historyButton: {
+		marginTop: 6,
+		alignSelf: "flex-start",
+		flexDirection: "row",
+		alignItems: "center",
+		gap: 6,
+		backgroundColor: "#dcfce7",
+		paddingVertical: 6,
+		paddingHorizontal: 10,
+		borderRadius: 999,
+	},
+	historyButtonText: {
+		color: "#166534",
+		fontWeight: "700",
+		fontSize: 12,
 	},
 });
