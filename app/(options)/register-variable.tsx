@@ -3,15 +3,15 @@ import { API_URL } from "@/constants/router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useEffect, useState } from "react";
 import {
-  Alert,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  ToastAndroid,
-  TouchableOpacity,
-  View,
+    Alert,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    ToastAndroid,
+    TouchableOpacity,
+    View,
 } from "react-native";
 
 export default function RegisterVariable() {
@@ -24,6 +24,8 @@ export default function RegisterVariable() {
   const [name, setName] = useState("");
   const [unit, setUnit] = useState("");
   const [description, setDescription] = useState("");
+  const [minValue, setMinValue] = useState("");
+  const [maxValue, setMaxValue] = useState("");
 
   const [systems, setSystems] = useState<GrowingSystem[]>([]);
   const [selectedSystemId, setSelectedSystemId] = useState<number | null>(null);
@@ -78,11 +80,27 @@ export default function RegisterVariable() {
 
   const validate = () => {
     let newErrors: any = {};
+    const parsedMin = Number(minValue);
+    const parsedMax = Number(maxValue);
 
     if (!name.trim()) newErrors.name = "Nombre requerido";
     if (!unit.trim()) newErrors.unit = "Unidad requerida";
     if (!selectedSystemId)
       newErrors.system = "Debes seleccionar un sistema";
+    if (minValue.trim() === "") newErrors.minValue = "Umbral mínimo requerido";
+    if (maxValue.trim() === "") newErrors.maxValue = "Umbral máximo requerido";
+
+    if (minValue.trim() !== "" && Number.isNaN(parsedMin)) {
+      newErrors.minValue = "El umbral mínimo debe ser numérico";
+    }
+
+    if (maxValue.trim() !== "" && Number.isNaN(parsedMax)) {
+      newErrors.maxValue = "El umbral máximo debe ser numérico";
+    }
+
+    if (!Number.isNaN(parsedMin) && !Number.isNaN(parsedMax) && parsedMin > parsedMax) {
+      newErrors.maxValue = "El umbral máximo debe ser mayor o igual al mínimo";
+    }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -102,6 +120,8 @@ export default function RegisterVariable() {
       }
 
       const registerVariableEndpoint = `${API_URL}/agronomic-variables`;
+      const parsedMinValue = Number(minValue);
+      const parsedMaxValue = Number(maxValue);
       const payload = {
         name: name.trim(),
         measurementUnit: unit.trim(),
@@ -176,11 +196,34 @@ export default function RegisterVariable() {
       if (!associateResponse.ok) {
         if (associateResponse.status === 409) {
           showToast("La variable ya estaba asociada a este sistema");
-          return;
+        } else {
+          const associateBody = await tryParseJson(associateResponse);
+          const message = associateBody?.message || "Error al asociar variable";
+          throw new Error(message);
         }
+      }
 
-        const associateBody = await tryParseJson(associateResponse);
-        const message = associateBody?.message || "Error al asociar variable";
+      const alertResponse = await fetch(
+        `${API_URL}/growing-systems/${selectedSystemId}/variable/${variableId}/alert-definition`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            minValue: parsedMinValue,
+            maxValue: parsedMaxValue,
+          }),
+        }
+      );
+
+      if (!alertResponse.ok && alertResponse.status !== 204) {
+        const alertBody = await tryParseJson(alertResponse);
+        const message =
+          alertBody?.error?.message ||
+          alertBody?.message ||
+          "No se pudieron configurar los umbrales de alerta";
         throw new Error(message);
       }
 
@@ -189,6 +232,8 @@ export default function RegisterVariable() {
       setName("");
       setUnit("");
       setDescription("");
+      setMinValue("");
+      setMaxValue("");
       setSelectedSystemId(null);
 
     } catch (error) {
@@ -229,6 +274,27 @@ export default function RegisterVariable() {
           value={description}
           onChangeText={setDescription}
         />
+
+        <Text style={styles.label}>Umbral mínimo</Text>
+        <TextInput
+          style={[styles.input, errors.minValue && styles.errorInput]}
+          value={minValue}
+          onChangeText={setMinValue}
+          keyboardType="numeric"
+          placeholder="Ej: 10"
+        />
+        {errors.minValue && <Text style={styles.error}>{errors.minValue}</Text>}
+
+        <Text style={styles.label}>Umbral máximo</Text>
+        <TextInput
+          style={[styles.input, errors.maxValue && styles.errorInput]}
+          value={maxValue}
+          onChangeText={setMaxValue}
+          keyboardType="numeric"
+          placeholder="Ej: 30"
+        />
+        {errors.maxValue && <Text style={styles.error}>{errors.maxValue}</Text>}
+
         <Text style={styles.label}>Seleccionar sistema</Text>
         <Picker
           value={selectedSystemId}

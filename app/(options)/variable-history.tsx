@@ -1,22 +1,22 @@
-import { ANALYTICS_API_URL, API_URL } from "@/constants/router";
+import { API_URL } from "@/constants/router";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import DateTimePicker, {
-    DateTimePickerEvent,
+  DateTimePickerAndroid,
+  DateTimePickerEvent,
 } from "@react-native-community/datetimepicker";
-import Constants from "expo-constants";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useMemo, useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 
 type HistoryPoint = {
@@ -25,26 +25,24 @@ type HistoryPoint = {
   rawDate?: string;
 };
 
-type AnalyticsSystem = {
-  id: string;
-  name: string;
-};
 
-type AnalyticsVariable = {
-  id: string;
-  name: string;
+const toDateInput = (date: Date) => date.toISOString().slice(0, 10);
+const toApiStartDate = (date: Date) => {
+  const start = new Date(date);
+  start.setHours(0, 0, 0, 0);
+  return start.toISOString();
 };
-
-const toIsoInput = (date: Date) => date.toISOString().slice(0, 19);
-const toIsoApi = (date: Date) => date.toISOString();
+const toApiEndDate = (date: Date) => {
+  const end = new Date(date);
+  end.setHours(23, 59, 59, 999);
+  return end.toISOString();
+};
 
 const toPickerLabel = (date: Date) =>
-  date.toLocaleString("es-CO", {
+  date.toLocaleDateString("es-CO", {
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
   });
 
 const pickFirst = (...values: Array<unknown>) => {
@@ -105,99 +103,11 @@ const normalizeHistoryPoints = (payload: any): HistoryPoint[] => {
     .filter(Boolean) as HistoryPoint[];
 };
 
-const normalizeAnalyticsSystems = (payload: any): AnalyticsSystem[] => {
-  const collection = payload?.systems ?? payload?.data ?? payload;
-
-  if (!Array.isArray(collection)) {
-    return [];
-  }
-
-  return collection
-    .map((item: any) => {
-      const id = String(pickFirst(item?.id, item?.system_id, item?.systemId) ?? "");
-      const name = String(
-        pickFirst(item?.name, item?.system_name, item?.systemName, item?.title) ?? ""
-      );
-
-      if (!id) return null;
-
-      return { id, name };
-    })
-    .filter(Boolean) as AnalyticsSystem[];
-};
-
-const normalizeAnalyticsVariables = (payload: any): AnalyticsVariable[] => {
-  const collection = payload?.variables ?? payload?.data ?? payload;
-
-  if (!Array.isArray(collection)) {
-    return [];
-  }
-
-  return collection
-    .map((item: any) => {
-      const id = String(pickFirst(item?.id, item?.variable_id, item?.variableId) ?? "");
-      const name = String(
-        pickFirst(item?.name, item?.variable_name, item?.variableName, item?.title) ?? ""
-      );
-
-      if (!id) return null;
-
-      return { id, name };
-    })
-    .filter(Boolean) as AnalyticsVariable[];
-};
-
-const normalizeName = (value: string) =>
-  value
-    .trim()
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/\p{Diacritic}/gu, "");
-
-const getExpoDevIp = () => {
-  const hostUri = Constants.expoConfig?.hostUri;
-  if (!hostUri) return undefined;
-
-  return hostUri.split(":")[0];
-};
-
-const getAnalyticsBaseCandidates = () => {
-  const inferredFromApi = API_URL.replace(":3000/api", ":8000");
-  const expoDevIp = getExpoDevIp();
-  const expoDerived = expoDevIp ? `http://${expoDevIp}:8000` : undefined;
-
-  const configuredAnalyticsIp =
-    ANALYTICS_API_URL && !ANALYTICS_API_URL.includes("localhost")
-      ? ANALYTICS_API_URL
-      : undefined;
-
-  const inferredAnalyticsIp =
-    inferredFromApi && !inferredFromApi.includes("localhost")
-      ? inferredFromApi
-      : undefined;
-
-  const androidPreferred = [
-    configuredAnalyticsIp,
-    inferredAnalyticsIp,
-    "http://192.168.1.2:8000",
-    expoDerived,
-  ];
-
-  const defaultPreferred = [
-    configuredAnalyticsIp,
-    inferredAnalyticsIp,
-    expoDerived,
-    ANALYTICS_API_URL,
-    inferredFromApi,
-    "http://localhost:8000",
-  ];
-
-  const candidates = Platform.OS === "android" ? androidPreferred : defaultPreferred;
-
-  return Array.from(new Set(candidates.filter(Boolean) as string[]));
-};
-
-const fetchWithTimeout = async (url: string, timeoutMs = 8000) => {
+const fetchWithTimeout = async (
+  url: string,
+  token?: string,
+  timeoutMs = 8000
+) => {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -206,6 +116,7 @@ const fetchWithTimeout = async (url: string, timeoutMs = 8000) => {
       signal: controller.signal,
       headers: {
         Accept: "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
     });
   } finally {
@@ -233,6 +144,42 @@ export default function VariableHistoryScreen() {
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [showEndPicker, setShowEndPicker] = useState(false);
 
+  const openStartDatePicker = () => {
+    if (Platform.OS === "android") {
+      DateTimePickerAndroid.open({
+        value: startDate,
+        mode: "date",
+        is24Hour: true,
+        onChange: (event, selectedDate) => {
+          if (event.type === "set" && selectedDate) {
+            setStartDate(selectedDate);
+          }
+        },
+      });
+      return;
+    }
+
+    setShowStartPicker(true);
+  };
+
+  const openEndDatePicker = () => {
+    if (Platform.OS === "android") {
+      DateTimePickerAndroid.open({
+        value: endDate,
+        mode: "date",
+        is24Hour: true,
+        onChange: (event, selectedDate) => {
+          if (event.type === "set" && selectedDate) {
+            setEndDate(selectedDate);
+          }
+        },
+      });
+      return;
+    }
+
+    setShowEndPicker(true);
+  };
+
   const chartData = useMemo(() => points.slice(-24), [points]);
   const maxValue = useMemo(() => {
     if (chartData.length === 0) return 1;
@@ -258,165 +205,49 @@ export default function VariableHistoryScreen() {
     try {
       setLoading(true);
 
-      const token = await AsyncStorage.getItem("token");
+      const rawToken = await AsyncStorage.getItem("token");
+      const token = rawToken ? rawToken.replace(/"/g, "") : null;
+
       if (!token) {
         Alert.alert("Error", "Sesión inválida");
         return;
       }
 
       const params = new URLSearchParams({
-        start_date: toIsoApi(startDate),
-        end_date: toIsoApi(endDate),
         grouping: "hours",
+        start_date: toApiStartDate(startDate),
+        end_date: toApiEndDate(endDate),
       });
 
-      const candidates = getAnalyticsBaseCandidates();
-      let payload: any = null;
-      let lastErrorMessage = "No se pudo cargar el historial de la variable";
-      let lastTriedBaseUrl = "";
+      const endpoint =
+        `${API_URL}/growing-systems/${systemId}/variables/${variableId}/history/analytics` +
+        `?${params.toString()}`;
 
-      for (const baseUrl of candidates) {
-        lastTriedBaseUrl = baseUrl;
+      const response = await fetchWithTimeout(endpoint, token);
+
+      if (response.status === 401) {
+        throw new Error("Tu sesión expiró o el token es inválido. Inicia sesión de nuevo.");
+      }
+
+      if (!response.ok) {
+        let backendMessage = "";
+
         try {
-          const systemsResponse = await fetchWithTimeout(`${baseUrl}/analysis/systems`);
-
-          if (!systemsResponse.ok) {
-            let backendMessage = "";
-
-            try {
-              const errorPayload = await systemsResponse.json();
-              backendMessage =
-                errorPayload?.detail?.[0]?.msg ||
-                errorPayload?.message ||
-                JSON.stringify(errorPayload);
-            } catch {
-              backendMessage = await systemsResponse.text();
-            }
-
-            lastErrorMessage =
-              backendMessage ||
-              `No se pudo consultar sistemas de analítica (HTTP ${systemsResponse.status})`;
-            continue;
-          }
-
-          const systemsPayload = await systemsResponse.json();
-          const analyticsSystems = normalizeAnalyticsSystems(systemsPayload);
-
-          let resolvedSystemId = systemId;
-          const idExists = analyticsSystems.some((item) => item.id === resolvedSystemId);
-
-          if (!idExists && systemName) {
-            const targetName = normalizeName(systemName);
-            const byName = analyticsSystems.find(
-              (item) => item.name && normalizeName(item.name) === targetName
-            );
-
-            if (byName) {
-              resolvedSystemId = byName.id;
-            }
-          }
-
-          if (!analyticsSystems.some((item) => item.id === resolvedSystemId)) {
-            const validIds = analyticsSystems.map((item) => item.id).join(", ");
-            throw new Error(
-              `Sistema ${systemId} no existe en analítica. IDs válidos: ${validIds || "ninguno"}`
-            );
-          }
-
-          const variablesResponse = await fetchWithTimeout(`${baseUrl}/analysis/variables`);
-
-          if (!variablesResponse.ok) {
-            let backendMessage = "";
-
-            try {
-              const errorPayload = await variablesResponse.json();
-              backendMessage =
-                errorPayload?.detail?.[0]?.msg ||
-                errorPayload?.message ||
-                JSON.stringify(errorPayload);
-            } catch {
-              backendMessage = await variablesResponse.text();
-            }
-
-            lastErrorMessage =
-              backendMessage ||
-              `No se pudo consultar variables de analítica (HTTP ${variablesResponse.status})`;
-            continue;
-          }
-
-          const variablesPayload = await variablesResponse.json();
-          const analyticsVariables = normalizeAnalyticsVariables(variablesPayload);
-
-          let resolvedVariableId = variableId;
-          const variableIdExists = analyticsVariables.some(
-            (item) => item.id === resolvedVariableId
-          );
-
-          if (!variableIdExists && variableName) {
-            const targetVariableName = normalizeName(variableName);
-            const variableByName = analyticsVariables.find(
-              (item) => item.name && normalizeName(item.name) === targetVariableName
-            );
-
-            if (variableByName) {
-              resolvedVariableId = variableByName.id;
-            }
-          }
-
-          if (!analyticsVariables.some((item) => item.id === resolvedVariableId)) {
-            const validVariableIds = analyticsVariables.map((item) => item.id).join(", ");
-            throw new Error(
-              `Variable ${variableId} no existe en analítica. IDs válidos: ${validVariableIds || "ninguno"}`
-            );
-          }
-
-          params.set("system_id", resolvedSystemId);
-          params.set("variable_id", resolvedVariableId);
-
-          const response = await fetchWithTimeout(
-            `${baseUrl}/analysis/history?${params.toString()}`
-          );
-
-          if (!response.ok) {
-            let backendMessage = "";
-
-            try {
-              const errorPayload = await response.json();
-              backendMessage =
-                errorPayload?.detail?.[0]?.msg ||
-                errorPayload?.message ||
-                JSON.stringify(errorPayload);
-            } catch {
-              backendMessage = await response.text();
-            }
-
-            lastErrorMessage =
-              backendMessage || `No se pudo recuperar el historial (HTTP ${response.status})`;
-
-            // Si el backend ya respondió con error funcional/validación,
-            // no seguimos intentando otros hosts porque el request llegó bien.
-            if ([400, 401, 403, 422].includes(response.status)) {
-              break;
-            }
-
-            continue;
-          }
-
-          payload = await response.json();
-          break;
-        } catch (error) {
-          if (error instanceof Error && error.name === "AbortError") {
-            lastErrorMessage = "Tiempo de espera agotado al consultar analítica";
-          } else {
-            lastErrorMessage =
-              error instanceof Error ? error.message : "Error de conexión con analítica";
-          }
+          const errorPayload = await response.json();
+          backendMessage =
+            errorPayload?.detail?.[0]?.msg ||
+            errorPayload?.message ||
+            JSON.stringify(errorPayload);
+        } catch {
+          backendMessage = await response.text();
         }
+
+        throw new Error(
+          backendMessage || `No se pudo recuperar el historial (HTTP ${response.status})`
+        );
       }
 
-      if (!payload) {
-        throw new Error(`${lastErrorMessage}. Última URL: ${lastTriedBaseUrl}`);
-      }
+      const payload = await response.json();
 
       const normalizedPoints = normalizeHistoryPoints(payload);
       setPoints(normalizedPoints);
@@ -446,20 +277,20 @@ export default function VariableHistoryScreen() {
         <Text style={styles.label}>Fecha inicial</Text>
         {Platform.OS === "web" ? (
           <TextInput
-            value={toIsoInput(startDate)}
+            value={toDateInput(startDate)}
             onChangeText={(value) => {
-              const parsed = new Date(value);
+              const parsed = new Date(`${value}T00:00:00`);
               if (!Number.isNaN(parsed.getTime())) {
                 setStartDate(parsed);
               }
             }}
             style={styles.input}
-            placeholder="YYYY-MM-DDTHH:mm:ss"
+            placeholder="YYYY-MM-DD"
           />
         ) : (
           <TouchableOpacity
             style={styles.dateButton}
-            onPress={() => setShowStartPicker(true)}
+            onPress={openStartDatePicker}
           >
             <Ionicons name="calendar-outline" size={18} color="#166534" />
             <Text style={styles.dateText}>{toPickerLabel(startDate)}</Text>
@@ -469,20 +300,20 @@ export default function VariableHistoryScreen() {
         <Text style={styles.label}>Fecha final</Text>
         {Platform.OS === "web" ? (
           <TextInput
-            value={toIsoInput(endDate)}
+            value={toDateInput(endDate)}
             onChangeText={(value) => {
-              const parsed = new Date(value);
+              const parsed = new Date(`${value}T00:00:00`);
               if (!Number.isNaN(parsed.getTime())) {
                 setEndDate(parsed);
               }
             }}
             style={styles.input}
-            placeholder="YYYY-MM-DDTHH:mm:ss"
+            placeholder="YYYY-MM-DD"
           />
         ) : (
           <TouchableOpacity
             style={styles.dateButton}
-            onPress={() => setShowEndPicker(true)}
+            onPress={openEndDatePicker}
           >
             <Ionicons name="calendar-outline" size={18} color="#166534" />
             <Text style={styles.dateText}>{toPickerLabel(endDate)}</Text>
@@ -498,16 +329,12 @@ export default function VariableHistoryScreen() {
         </TouchableOpacity>
       </View>
 
-      {showStartPicker && Platform.OS !== "web" && (
+      {showStartPicker && Platform.OS === "ios" && (
         <DateTimePicker
           value={startDate}
-          mode="datetime"
-          display={Platform.OS === "ios" ? "inline" : "default"}
+          mode="date"
+          display="inline"
           onChange={(event: DateTimePickerEvent, selectedDate?: Date) => {
-            if (Platform.OS !== "ios") {
-              setShowStartPicker(false);
-            }
-
             if (event.type === "set" && selectedDate) {
               setStartDate(selectedDate);
             }
@@ -515,16 +342,12 @@ export default function VariableHistoryScreen() {
         />
       )}
 
-      {showEndPicker && Platform.OS !== "web" && (
+      {showEndPicker && Platform.OS === "ios" && (
         <DateTimePicker
           value={endDate}
-          mode="datetime"
-          display={Platform.OS === "ios" ? "inline" : "default"}
+          mode="date"
+          display="inline"
           onChange={(event: DateTimePickerEvent, selectedDate?: Date) => {
-            if (Platform.OS !== "ios") {
-              setShowEndPicker(false);
-            }
-
             if (event.type === "set" && selectedDate) {
               setEndDate(selectedDate);
             }

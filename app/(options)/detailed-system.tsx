@@ -6,10 +6,12 @@ import { useCallback, useEffect, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
+    Modal,
     Platform,
     ScrollView,
     StyleSheet,
     Text,
+    TextInput,
     TouchableOpacity,
     View,
 } from "react-native";
@@ -20,6 +22,9 @@ type AgronomicVariable = {
 	name?: string;
 	measurementUnit?: string;
 	description?: string;
+	minValue?: number;
+	maxValue?: number;
+	currentValue?: number;
 	sampleRate?: number;
 	status?: string;
 };
@@ -50,9 +55,222 @@ export default function DetailedSystem() {
 	const [loading, setLoading] = useState(true);
 	const [detail, setDetail] = useState<GrowingSystemDetail | null>(null);
 	const [deletingVariableId, setDeletingVariableId] = useState<number | null>(null);
+	const [isEditModalVisible, setIsEditModalVisible] = useState(false);
+	const [editingVariableId, setEditingVariableId] = useState<number | null>(null);
+	const [editName, setEditName] = useState("");
+	const [editMeasurementUnit, setEditMeasurementUnit] = useState("");
+	const [editDescription, setEditDescription] = useState("");
+	const [editMinValue, setEditMinValue] = useState("");
+	const [editMaxValue, setEditMaxValue] = useState("");
+	const [savingEdit, setSavingEdit] = useState(false);
 
 	const getVariableId = (variable: AgronomicVariable) =>
 		variable.variableId ?? variable.id ?? null;
+
+	const getVariableCurrentValue = (variable: AgronomicVariable) => {
+		if (typeof variable.currentValue === "number" && !Number.isNaN(variable.currentValue)) {
+			return variable.currentValue;
+		}
+
+		return undefined;
+	};
+
+	const isVariableOutOfThreshold = (variable: AgronomicVariable) => {
+		const currentValue = getVariableCurrentValue(variable);
+		const hasMin = typeof variable.minValue === "number" && !Number.isNaN(variable.minValue);
+		const hasMax = typeof variable.maxValue === "number" && !Number.isNaN(variable.maxValue);
+
+		if (typeof currentValue === "number" && (hasMin || hasMax)) {
+			if (hasMin && currentValue < (variable.minValue as number)) return true;
+			if (hasMax && currentValue > (variable.maxValue as number)) return true;
+			return false;
+		}
+
+		const statusText = String(variable.status || "").toLowerCase();
+		return /(fuera|out|alert|critical|danger|alarm)/.test(statusText);
+	};
+
+	const openEditVariableModal = (variable: AgronomicVariable) => {
+		const variableId = getVariableId(variable);
+		if (!variableId) {
+			Alert.alert("Error", "No se encontró el identificador de la variable");
+			return;
+		}
+
+		setEditingVariableId(variableId);
+		setEditName(variable.name || "");
+		setEditMeasurementUnit(variable.measurementUnit || "");
+		setEditDescription(variable.description || "");
+		setEditMinValue(
+			typeof variable.minValue === "number" ? String(variable.minValue) : ""
+		);
+		setEditMaxValue(
+			typeof variable.maxValue === "number" ? String(variable.maxValue) : ""
+		);
+		setIsEditModalVisible(true);
+	};
+
+	const closeEditVariableModal = () => {
+		if (savingEdit) return;
+		setIsEditModalVisible(false);
+		setEditingVariableId(null);
+		setEditName("");
+		setEditMeasurementUnit("");
+		setEditDescription("");
+		setEditMinValue("");
+		setEditMaxValue("");
+	};
+
+	const handleEditVariable = async () => {
+		if (!editingVariableId) {
+			Alert.alert("Error", "No se encontró la variable a editar");
+			return;
+		}
+
+		if (!editName.trim()) {
+			Alert.alert("Error", "El nombre de la variable es obligatorio");
+			return;
+		}
+
+		if (!editMeasurementUnit.trim()) {
+			Alert.alert("Error", "La unidad de medida es obligatoria");
+			return;
+		}
+
+		if (editMinValue.trim() === "" || editMaxValue.trim() === "") {
+			Alert.alert("Error", "Los umbrales mínimo y máximo son obligatorios");
+			return;
+		}
+
+		const parsedMinValue = Number(editMinValue);
+		const parsedMaxValue = Number(editMaxValue);
+
+		if (Number.isNaN(parsedMinValue) || Number.isNaN(parsedMaxValue)) {
+			Alert.alert("Error", "Los umbrales deben ser valores numéricos");
+			return;
+		}
+
+		if (parsedMinValue > parsedMaxValue) {
+			Alert.alert("Error", "El umbral máximo debe ser mayor o igual al mínimo");
+			return;
+		}
+
+		try {
+			setSavingEdit(true);
+
+			const rawToken = await AsyncStorage.getItem("token");
+			const token = rawToken ? rawToken.replace(/"/g, "") : null;
+
+			if (!token) {
+				Alert.alert("Error", "Sesión inválida");
+				return;
+			}
+
+			const response = await fetch(
+				`${API_URL}/agronomic-variables/${editingVariableId}`,
+				{
+					method: "PATCH",
+					headers: {
+						"Content-Type": "application/json",
+						Authorization: `Bearer ${token}`,
+					},
+					body: JSON.stringify({
+						name: editName.trim(),
+						measurementUnit: editMeasurementUnit.trim(),
+						description: editDescription.trim(),
+					}),
+				}
+			);
+
+			if (!response.ok) {
+				let message = "No se pudo actualizar la variable";
+
+				try {
+					const errorPayload = await response.json();
+					message =
+						errorPayload?.error?.message ||
+						errorPayload?.message ||
+						message;
+				} catch {
+					// no-op
+				}
+
+				throw new Error(message);
+			}
+
+			const systemIdentifier = String(systemId || detail?.systemId || detail?.id || "");
+			if (!systemIdentifier) {
+				throw new Error("No se encontró el identificador del sistema");
+			}
+
+			const alertDefinitionResponse = await fetch(
+				`${API_URL}/growing-systems/${systemIdentifier}/variable/${editingVariableId}/alert-definition`,
+				{
+					method: "PATCH",
+					headers: {
+						"Content-Type": "application/json",
+						Authorization: `Bearer ${token}`,
+					},
+					body: JSON.stringify({
+						minValue: parsedMinValue,
+						maxValue: parsedMaxValue,
+					}),
+				}
+			);
+
+			if (!alertDefinitionResponse.ok && alertDefinitionResponse.status !== 204) {
+				let message = "No se pudieron actualizar los umbrales de alerta";
+
+				try {
+					const errorPayload = await alertDefinitionResponse.json();
+					message =
+						errorPayload?.error?.message ||
+						errorPayload?.message ||
+						message;
+				} catch {
+					// no-op
+				}
+
+				throw new Error(message);
+			}
+
+			const updated = await response.json();
+
+			setDetail((prev) => {
+				if (!prev) return prev;
+
+				const updateVariable = (list?: AgronomicVariable[]) =>
+					(list || []).map((item) => {
+						if (getVariableId(item) !== editingVariableId) return item;
+
+						return {
+							...item,
+							name: updated?.name ?? editName.trim(),
+							measurementUnit:
+								updated?.measurementUnit ?? editMeasurementUnit.trim(),
+							description: updated?.description ?? editDescription.trim(),
+							minValue: parsedMinValue,
+							maxValue: parsedMaxValue,
+						};
+					});
+
+				return {
+					...prev,
+					agronomicVariables: updateVariable(prev.agronomicVariables),
+					variables: updateVariable(prev.variables),
+				};
+			});
+
+			Alert.alert("Éxito", "Variable actualizada correctamente");
+			closeEditVariableModal();
+		} catch (error) {
+			const message =
+				error instanceof Error ? error.message : "No se pudo actualizar la variable";
+			Alert.alert("Error", message);
+		} finally {
+			setSavingEdit(false);
+		}
+	};
 
 	const confirmDeleteVariable = async (variableName: string) => {
 		if (Platform.OS === "web") {
@@ -195,6 +413,28 @@ export default function DetailedSystem() {
 						variableId: pickFirst(source?.variableId, source?.id, item?.variableId, item?.id),
 						id: pickFirst(source?.id, source?.variableId, item?.id, item?.variableId),
 						name: pickFirst(source?.name, source?.variableName, item?.name),
+						minValue: pickFirst(
+							source?.minValue,
+							source?.alertDefinition?.minValue,
+							item?.minValue,
+							item?.alertDefinition?.minValue
+						),
+						maxValue: pickFirst(
+							source?.maxValue,
+							source?.alertDefinition?.maxValue,
+							item?.maxValue,
+							item?.alertDefinition?.maxValue
+						),
+						currentValue: pickFirst(
+							source?.currentValue,
+							source?.latestValue,
+							source?.lastValue,
+							source?.value,
+							item?.currentValue,
+							item?.latestValue,
+							item?.lastValue,
+							item?.value
+						),
 						measurementUnit: pickFirst(
 							source?.measurementUnit,
 							source?.unit,
@@ -238,6 +478,9 @@ export default function DetailedSystem() {
 
 	const variables =
 		detail?.agronomicVariables || detail?.variables || [];
+	const hasOutOfThresholdVariables = variables.some((variable) =>
+		isVariableOutOfThreshold(variable)
+	);
 
 	return (
 		<ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -248,14 +491,40 @@ export default function DetailedSystem() {
 				</TouchableOpacity>
 
 				<Text style={styles.title}>Detalle de invernadero</Text>
+
+				<TouchableOpacity
+					style={styles.analysisButton}
+					onPress={() =>
+						router.push({
+							pathname: "/(options)/comparative-analysis",
+							params: {
+								systemId: String(systemId || detail?.systemId || detail?.id || ""),
+								systemName: detail?.name || "Sistema",
+							},
+						})
+					}
+				>
+					<Ionicons name="analytics-outline" size={16} color="#166534" />
+					<Text style={styles.analysisButtonText}>Analisis comparativo</Text>
+				</TouchableOpacity>
 			</View>
 
 			{loading ? (
 				<ActivityIndicator size="large" color="#16a34a" style={{ marginTop: 24 }} />
 			) : (
 				<>
-					<View style={styles.card}>
+					<View
+						style={[
+							styles.card,
+							hasOutOfThresholdVariables && styles.alertSystemCard,
+						]}
+					>
 						<Text style={styles.systemName}>{detail?.name || "Sin nombre"}</Text>
+						{hasOutOfThresholdVariables && (
+							<View style={styles.alertBadge}>
+								<Text style={styles.alertBadgeText}>Variables fuera de umbral</Text>
+							</View>
+						)}
 
 						<View style={styles.infoRow}>
 							<Text style={styles.label}>Ubicación</Text>
@@ -291,19 +560,41 @@ export default function DetailedSystem() {
 							<Text style={styles.emptyText}>No hay variables asociadas</Text>
 						</View>
 					) : (
-						variables.map((variable, index) => (
+						variables.map((variable, index) => {
+							const outOfThreshold = isVariableOutOfThreshold(variable);
+							const currentValue = getVariableCurrentValue(variable);
+
+							return (
 							<View
 								key={String(variable.variableId || variable.id || index)}
-								style={styles.variableCard}
+								style={[
+									styles.variableCard,
+									outOfThreshold && styles.alertVariableCard,
+								]}
 							>
 								<View style={styles.variableHeader}>
-									<Text style={styles.variableTitle}>{variable.name || "Sin nombre"}</Text>
-									<TouchableOpacity
-										onPress={() => handleDeleteVariable(variable)}
-										disabled={deletingVariableId === getVariableId(variable)}
-									>
-										<Ionicons name="trash-outline" size={18} color="#dc2626" />
-									</TouchableOpacity>
+									<View style={styles.variableTitleContainer}>
+										<Text style={styles.variableTitle}>{variable.name || "Sin nombre"}</Text>
+										{outOfThreshold && (
+											<View style={styles.alertChip}>
+												<Text style={styles.alertChipText}>Fuera de umbral</Text>
+											</View>
+										)}
+									</View>
+									<View style={styles.variableActions}>
+										<TouchableOpacity
+											onPress={() => openEditVariableModal(variable)}
+											disabled={savingEdit || deletingVariableId === getVariableId(variable)}
+										>
+											<Ionicons name="pencil" size={18} color="#166534" />
+										</TouchableOpacity>
+										<TouchableOpacity
+											onPress={() => handleDeleteVariable(variable)}
+											disabled={deletingVariableId === getVariableId(variable)}
+										>
+											<Ionicons name="trash-outline" size={18} color="#dc2626" />
+										</TouchableOpacity>
+									</View>
 								</View>
 
 								<View style={styles.infoRow}>
@@ -323,33 +614,152 @@ export default function DetailedSystem() {
 									<Text style={styles.value}>{variable.status || "-"}</Text>
 								</View>
 
-								<TouchableOpacity
-									style={styles.historyButton}
-									onPress={() =>
-										router.push({
-											pathname: "/(options)/variable-history",
-											params: {
-												systemId: String(systemId || detail?.systemId || detail?.id || ""),
-												variableId: String(getVariableId(variable) || ""),
-												variableName: variable.name || "Variable",
-												systemName: detail?.name || "Sistema",
-											},
-										})
-									}
-									disabled={!getVariableId(variable)}
-								>
-									<Ionicons name="analytics-outline" size={16} color="#166534" />
-									<Text style={styles.historyButtonText}>Ver historial</Text>
-								</TouchableOpacity>
+								<View style={styles.infoRow}>
+									<Text style={styles.label}>Umbral mínimo</Text>
+									<Text style={styles.value}>
+										{typeof variable.minValue === "number" ? variable.minValue : "-"}
+									</Text>
+								</View>
+
+								<View style={styles.infoRow}>
+									<Text style={styles.label}>Umbral máximo</Text>
+									<Text style={styles.value}>
+										{typeof variable.maxValue === "number" ? variable.maxValue : "-"}
+									</Text>
+								</View>
+
+								<View style={styles.infoRow}>
+									<Text style={styles.label}>Valor actual</Text>
+									<Text style={styles.value}>
+										{typeof currentValue === "number" ? currentValue : "-"}
+									</Text>
+								</View>
+
+								<View style={styles.historyButtonsRow}>
+									<TouchableOpacity
+										style={styles.historyButton}
+										onPress={() =>
+											router.push({
+												pathname: "/(options)/variable-realtime",
+												params: {
+													systemId: String(systemId || detail?.systemId || detail?.id || ""),
+													variableId: String(getVariableId(variable) || ""),
+													variableName: variable.name || "Variable",
+													systemName: detail?.name || "Sistema",
+												},
+											})
+										}
+										disabled={!getVariableId(variable)}
+									>
+										<Ionicons name="pulse-outline" size={16} color="#166534" />
+										<Text style={styles.historyButtonText}>Ver en tiempo real</Text>
+									</TouchableOpacity>
+
+									<TouchableOpacity
+										style={styles.historyButton}
+										onPress={() =>
+											router.push({
+												pathname: "/(options)/variable-history",
+												params: {
+													systemId: String(systemId || detail?.systemId || detail?.id || ""),
+													variableId: String(getVariableId(variable) || ""),
+													variableName: variable.name || "Variable",
+													systemName: detail?.name || "Sistema",
+												},
+											})
+										}
+										disabled={!getVariableId(variable)}
+									>
+										<Ionicons name="analytics-outline" size={16} color="#166534" />
+										<Text style={styles.historyButtonText}>Ver histórico</Text>
+									</TouchableOpacity>
+								</View>
 
 								<Text style={styles.variableDescription}>
 									{variable.description || "Sin descripción"}
 								</Text>
 							</View>
-						))
+							);
+						})
 					)}
 				</>
 			)}
+
+			<Modal
+				visible={isEditModalVisible}
+				transparent
+				animationType="fade"
+				onRequestClose={closeEditVariableModal}
+			>
+				<View style={styles.modalOverlay}>
+					<View style={styles.modalCard}>
+						<Text style={styles.modalTitle}>Editar variable</Text>
+
+						<Text style={styles.modalLabel}>Nombre</Text>
+						<TextInput
+							style={styles.modalInput}
+							value={editName}
+							onChangeText={setEditName}
+							placeholder="Nombre de la variable"
+						/>
+
+						<Text style={styles.modalLabel}>Unidad de medida</Text>
+						<TextInput
+							style={styles.modalInput}
+							value={editMeasurementUnit}
+							onChangeText={setEditMeasurementUnit}
+							placeholder="Unidad"
+						/>
+
+						<Text style={styles.modalLabel}>Descripción</Text>
+						<TextInput
+							style={[styles.modalInput, styles.modalTextArea]}
+							value={editDescription}
+							onChangeText={setEditDescription}
+							placeholder="Descripción"
+							multiline
+						/>
+
+						<Text style={styles.modalLabel}>Umbral mínimo</Text>
+						<TextInput
+							style={styles.modalInput}
+							value={editMinValue}
+							onChangeText={setEditMinValue}
+							placeholder="Ej: 10"
+							keyboardType="numeric"
+						/>
+
+						<Text style={styles.modalLabel}>Umbral máximo</Text>
+						<TextInput
+							style={styles.modalInput}
+							value={editMaxValue}
+							onChangeText={setEditMaxValue}
+							placeholder="Ej: 30"
+							keyboardType="numeric"
+						/>
+
+						<View style={styles.modalActions}>
+							<TouchableOpacity
+								style={[styles.modalButton, styles.cancelButton]}
+								onPress={closeEditVariableModal}
+								disabled={savingEdit}
+							>
+								<Text style={styles.cancelButtonText}>Cancelar</Text>
+							</TouchableOpacity>
+
+							<TouchableOpacity
+								style={[styles.modalButton, styles.saveButton, savingEdit && styles.buttonDisabled]}
+								onPress={handleEditVariable}
+								disabled={savingEdit}
+							>
+								<Text style={styles.saveButtonText}>
+									{savingEdit ? "Guardando..." : "Guardar"}
+								</Text>
+							</TouchableOpacity>
+						</View>
+					</View>
+				</View>
+			</Modal>
 		</ScrollView>
 	);
 }
@@ -388,12 +798,45 @@ const styles = StyleSheet.create({
 		color: "#14532d",
 		marginBottom: 14,
 	},
+	analysisButton: {
+		alignSelf: "flex-start",
+		flexDirection: "row",
+		alignItems: "center",
+		gap: 6,
+		paddingVertical: 7,
+		paddingHorizontal: 12,
+		borderRadius: 999,
+		backgroundColor: "#dcfce7",
+	},
+	analysisButtonText: {
+		color: "#166534",
+		fontWeight: "700",
+		fontSize: 12,
+	},
 	card: {
 		backgroundColor: "#fff",
 		borderRadius: 20,
 		padding: 16,
 		elevation: 3,
 		marginBottom: 18,
+	},
+	alertSystemCard: {
+		backgroundColor: "#fef2f2",
+		borderWidth: 1,
+		borderColor: "#fca5a5",
+	},
+	alertBadge: {
+		alignSelf: "flex-start",
+		backgroundColor: "#fee2e2",
+		paddingHorizontal: 10,
+		paddingVertical: 4,
+		borderRadius: 999,
+		marginBottom: 10,
+	},
+	alertBadgeText: {
+		color: "#991b1b",
+		fontWeight: "700",
+		fontSize: 12,
 	},
 	systemName: {
 		fontSize: 20,
@@ -446,10 +889,32 @@ const styles = StyleSheet.create({
 		marginBottom: 10,
 		elevation: 2,
 	},
+	alertVariableCard: {
+		backgroundColor: "#fef2f2",
+		borderWidth: 1,
+		borderColor: "#fca5a5",
+	},
 	variableTitle: {
 		color: "#166534",
 		fontWeight: "700",
 		fontSize: 16,
+	},
+	variableTitleContainer: {
+		flexDirection: "row",
+		alignItems: "center",
+		gap: 8,
+		flexWrap: "wrap",
+	},
+	alertChip: {
+		backgroundColor: "#fee2e2",
+		paddingHorizontal: 8,
+		paddingVertical: 2,
+		borderRadius: 999,
+	},
+	alertChipText: {
+		color: "#991b1b",
+		fontSize: 11,
+		fontWeight: "700",
 	},
 	variableHeader: {
 		flexDirection: "row",
@@ -457,9 +922,77 @@ const styles = StyleSheet.create({
 		justifyContent: "space-between",
 		marginBottom: 8,
 	},
+	variableActions: {
+		flexDirection: "row",
+		alignItems: "center",
+		gap: 12,
+	},
 	variableDescription: {
 		marginTop: 6,
 		color: "#4b5563",
+	},
+	modalOverlay: {
+		flex: 1,
+		backgroundColor: "rgba(0, 0, 0, 0.35)",
+		justifyContent: "center",
+		padding: 20,
+	},
+	modalCard: {
+		backgroundColor: "#fff",
+		borderRadius: 16,
+		padding: 16,
+		elevation: 4,
+	},
+	modalTitle: {
+		fontSize: 18,
+		fontWeight: "700",
+		color: "#14532d",
+		marginBottom: 10,
+	},
+	modalLabel: {
+		color: "#4b5563",
+		fontWeight: "600",
+		marginTop: 8,
+		marginBottom: 4,
+	},
+	modalInput: {
+		backgroundColor: "#f2f2f2",
+		borderRadius: 10,
+		paddingHorizontal: 12,
+		paddingVertical: 10,
+		color: "#111827",
+	},
+	modalTextArea: {
+		minHeight: 80,
+		textAlignVertical: "top",
+	},
+	modalActions: {
+		flexDirection: "row",
+		justifyContent: "flex-end",
+		gap: 10,
+		marginTop: 14,
+	},
+	modalButton: {
+		borderRadius: 10,
+		paddingHorizontal: 14,
+		paddingVertical: 10,
+	},
+	cancelButton: {
+		backgroundColor: "#e5e7eb",
+	},
+	cancelButtonText: {
+		color: "#374151",
+		fontWeight: "700",
+	},
+	saveButton: {
+		backgroundColor: "#16a34a",
+	},
+	saveButtonText: {
+		color: "#fff",
+		fontWeight: "700",
+	},
+	buttonDisabled: {
+		opacity: 0.7,
 	},
 	historyButton: {
 		marginTop: 6,
@@ -471,6 +1004,12 @@ const styles = StyleSheet.create({
 		paddingVertical: 6,
 		paddingHorizontal: 10,
 		borderRadius: 999,
+	},
+	historyButtonsRow: {
+		marginTop: 6,
+		flexDirection: "row",
+		flexWrap: "wrap",
+		gap: 8,
 	},
 	historyButtonText: {
 		color: "#166534",
