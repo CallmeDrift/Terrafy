@@ -5,6 +5,7 @@ import DateTimePicker, {
   DateTimePickerAndroid,
   DateTimePickerEvent,
 } from "@react-native-community/datetimepicker";
+import * as FileSystem from "expo-file-system/legacy";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useMemo, useState } from "react";
 import {
@@ -24,6 +25,8 @@ type HistoryPoint = {
   value: number;
   rawDate?: string;
 };
+
+type ExportFormat = "csv" | "excel";
 
 
 const toDateInput = (date: Date) => date.toISOString().slice(0, 10);
@@ -52,6 +55,97 @@ const pickFirst = (...values: Array<unknown>) => {
     }
   }
   return undefined;
+};
+
+const sanitizeForFileName = (value: string) =>
+  value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9_-]/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_|_$/g, "")
+    .toLowerCase();
+
+const formatDateForFileName = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}${month}${day}`;
+};
+
+const getExtensionByFormat = (format: ExportFormat) => {
+  if (format === "excel") return "xlsx";
+  return "csv";
+};
+
+const getMimeByFormat = (format: ExportFormat) => {
+  if (format === "excel") {
+    return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+  }
+
+  return "text/csv";
+};
+
+const inferExtensionFromContentType = (contentType?: string | null) => {
+  if (!contentType) return null;
+
+  const normalized = contentType.toLowerCase();
+
+  if (normalized.includes("spreadsheet") || normalized.includes("excel")) {
+    return "xlsx";
+  }
+
+  if (normalized.includes("csv")) {
+    return "csv";
+  }
+
+  if (normalized.includes("json")) {
+    return "json";
+  }
+
+  if (normalized.includes("text/plain")) {
+    return "txt";
+  }
+
+  return null;
+};
+
+const getHeaderValue = (
+  headers: Record<string, string> | undefined,
+  key: string
+) => {
+  if (!headers) return null;
+
+  const direct = headers[key];
+  if (direct) return direct;
+
+  const lowerKey = key.toLowerCase();
+
+  for (const headerKey of Object.keys(headers)) {
+    if (headerKey.toLowerCase() === lowerKey) {
+      return headers[headerKey];
+    }
+  }
+
+  return null;
+};
+
+const parseFileNameFromContentDisposition = (contentDisposition?: string | null) => {
+  if (!contentDisposition) {
+    return null;
+  }
+
+  const utf8Match = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utf8Match?.[1]) {
+    return decodeURIComponent(utf8Match[1].trim().replace(/"/g, ""));
+  }
+
+  const asciiMatch = contentDisposition.match(/filename=([^;]+)/i);
+  if (asciiMatch?.[1]) {
+    return asciiMatch[1].trim().replace(/"/g, "");
+  }
+
+  return null;
 };
 
 const normalizeHistoryPoints = (payload: any): HistoryPoint[] => {
@@ -106,7 +200,8 @@ const normalizeHistoryPoints = (payload: any): HistoryPoint[] => {
 const fetchWithTimeout = async (
   url: string,
   token?: string,
-  timeoutMs = 8000
+  timeoutMs = 8000,
+  accept = "application/json"
 ) => {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -115,7 +210,7 @@ const fetchWithTimeout = async (
     return await fetch(url, {
       signal: controller.signal,
       headers: {
-        Accept: "application/json",
+        Accept: accept,
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
     });
@@ -143,6 +238,8 @@ export default function VariableHistoryScreen() {
   const [endDate, setEndDate] = useState(() => new Date());
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [showEndPicker, setShowEndPicker] = useState(false);
+  const [selectedFormat, setSelectedFormat] = useState<ExportFormat>("csv");
+  const [exporting, setExporting] = useState(false);
 
   const openStartDatePicker = () => {
     if (Platform.OS === "android") {
@@ -260,6 +357,179 @@ export default function VariableHistoryScreen() {
     }
   };
 
+  const handleExportData = async () => {
+    if (!systemId || !variableId) {
+      Alert.alert("Error", "Faltan datos de sistema o variable");
+      return;
+    }
+
+    if (startDate > endDate) {
+      Alert.alert("Error", "La fecha inicial no puede ser mayor a la final");
+      return;
+    }
+
+    try {
+      setExporting(true);
+
+      const rawToken = await AsyncStorage.getItem("token");
+      const token = rawToken ? rawToken.replace(/"/g, "") : null;
+
+      if (!token) {
+        Alert.alert("Error", "Sesion invalida");
+        return;
+      }
+
+      const params = new URLSearchParams({
+        grouping: "hours",
+        start_date: toApiStartDate(startDate),
+        end_date: toApiEndDate(endDate),
+        format: selectedFormat,
+      });
+
+      const endpoint =
+        `${API_URL}/growing-systems/${systemId}/variables/${variableId}/history/analytics` +
+        `?${params.toString()}`;
+
+      const variableFileToken = sanitizeForFileName(String(variableName || "variable")) || "variable";
+      const startToken = formatDateForFileName(startDate);
+      const endToken = formatDateForFileName(endDate);
+      const defaultFileName = `historial_${variableFileToken}_${startToken}_${endToken}.${getExtensionByFormat(selectedFormat)}`;
+
+      if (Platform.OS === "web") {
+        const response = await fetchWithTimeout(endpoint, token, 15000, "*/*");
+
+        if (response.status === 401) {
+          throw new Error("Tu sesion expiro o el token es invalido. Inicia sesion de nuevo.");
+        }
+
+        if (!response.ok) {
+          let backendMessage = "";
+
+          try {
+            const errorPayload = await response.json();
+            backendMessage =
+              errorPayload?.detail?.[0]?.msg ||
+              errorPayload?.message ||
+              JSON.stringify(errorPayload);
+          } catch {
+            backendMessage = await response.text();
+          }
+
+          throw new Error(
+            backendMessage || `No se pudo exportar el historial (HTTP ${response.status})`
+          );
+        }
+
+        const responseFileName = parseFileNameFromContentDisposition(
+          response.headers.get("content-disposition")
+        );
+
+        const responseExtension = inferExtensionFromContentType(
+          response.headers.get("content-type")
+        );
+
+        const fileName = responseFileName ||
+          (responseExtension
+            ? `historial_${variableFileToken}_${startToken}_${endToken}.${responseExtension}`
+            : defaultFileName);
+
+        const blob = await response.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = blobUrl;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(blobUrl);
+
+        Alert.alert("Exito", "Archivo generado y descargado correctamente");
+        return;
+      }
+
+      const baseDirectory = FileSystem.documentDirectory || FileSystem.cacheDirectory;
+
+      if (!baseDirectory) {
+        throw new Error("No se encontro una ruta valida para guardar el archivo");
+      }
+
+      const exportDirectory = `${baseDirectory}exports/`;
+
+      await FileSystem.makeDirectoryAsync(exportDirectory, {
+        intermediates: true,
+      });
+
+      const tempUri = `${exportDirectory}tmp_${Date.now()}_${defaultFileName}`;
+
+      const downloadResult = await FileSystem.downloadAsync(endpoint, tempUri, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "*/*",
+        },
+      });
+
+      if (!downloadResult || downloadResult.status >= 400) {
+        throw new Error("No se pudo descargar el archivo exportado");
+      }
+
+      const contentDisposition = getHeaderValue(
+        downloadResult.headers,
+        "content-disposition"
+      );
+      const contentType = getHeaderValue(downloadResult.headers, "content-type");
+
+      const responseFileName = parseFileNameFromContentDisposition(contentDisposition);
+      const responseExtension = inferExtensionFromContentType(contentType);
+
+      const finalFileName = responseFileName ||
+        (responseExtension
+          ? `historial_${variableFileToken}_${startToken}_${endToken}.${responseExtension}`
+          : defaultFileName);
+
+      const finalUri = `${exportDirectory}${finalFileName}`;
+
+      await FileSystem.moveAsync({
+        from: downloadResult.uri,
+        to: finalUri,
+      });
+
+      if (Platform.OS === "android") {
+        const permissions = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
+
+        if (permissions.granted) {
+          const mimeType = contentType || getMimeByFormat(selectedFormat);
+          const base64Content = await FileSystem.readAsStringAsync(finalUri, {
+            encoding: FileSystem.EncodingType.Base64,
+          });
+
+          const publicUri = await FileSystem.StorageAccessFramework.createFileAsync(
+            permissions.directoryUri,
+            finalFileName,
+            mimeType
+          );
+
+          await FileSystem.writeAsStringAsync(publicUri, base64Content, {
+            encoding: FileSystem.EncodingType.Base64,
+          });
+
+          Alert.alert("Exito", "Archivo descargado y guardado en la carpeta seleccionada.");
+          return;
+        }
+      }
+
+      Alert.alert("Exito", `Archivo descargado en: ${finalUri}`);
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "No se pudo generar el archivo de exportacion";
+
+      Alert.alert("Error", message);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
@@ -327,6 +597,61 @@ export default function VariableHistoryScreen() {
         >
           <Text style={styles.buttonText}>{loading ? "Consultando..." : "Consultar historial"}</Text>
         </TouchableOpacity>
+
+        <Text style={styles.label}>Formato de exportacion</Text>
+        <View style={styles.formatRow}>
+          <TouchableOpacity
+            style={[
+              styles.formatOption,
+              selectedFormat === "csv" && styles.formatOptionSelected,
+            ]}
+            onPress={() => setSelectedFormat("csv")}
+          >
+            <Text
+              style={[
+                styles.formatOptionText,
+                selectedFormat === "csv" && styles.formatOptionTextSelected,
+              ]}
+            >
+              CSV (.csv)
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.formatOption,
+              selectedFormat === "excel" && styles.formatOptionSelected,
+            ]}
+            onPress={() => setSelectedFormat("excel")}
+          >
+            <Text
+              style={[
+                styles.formatOptionText,
+                selectedFormat === "excel" && styles.formatOptionTextSelected,
+              ]}
+            >
+              Excel (.xlsx)
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        <TouchableOpacity
+          style={[
+            styles.exportButton,
+            (loading || exporting) && styles.buttonDisabled,
+          ]}
+          onPress={handleExportData}
+          disabled={loading || exporting}
+        >
+          <Ionicons name="download-outline" size={16} color="#fff" />
+          <Text style={styles.buttonText}>
+            {exporting ? "Descargando archivo..." : "Exportar datos"}
+          </Text>
+        </TouchableOpacity>
+
+        <Text style={styles.exportHint}>
+          La exportacion se realiza desde el endpoint usando el formato seleccionado.
+        </Text>
       </View>
 
       {showStartPicker && Platform.OS === "ios" && (
@@ -480,6 +805,45 @@ const styles = StyleSheet.create({
   buttonText: {
     color: "#fff",
     fontWeight: "700",
+  },
+  formatRow: {
+    marginTop: 8,
+    flexDirection: "row",
+    gap: 8,
+  },
+  formatOption: {
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: "#f8fafc",
+  },
+  formatOptionSelected: {
+    borderColor: "#166534",
+    backgroundColor: "#dcfce7",
+  },
+  formatOptionText: {
+    color: "#334155",
+    fontWeight: "600",
+  },
+  formatOptionTextSelected: {
+    color: "#166534",
+  },
+  exportButton: {
+    marginTop: 10,
+    backgroundColor: "#0369a1",
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
+  },
+  exportHint: {
+    marginTop: 8,
+    color: "#6b7280",
+    fontSize: 12,
   },
   emptyCard: {
     marginTop: 16,
