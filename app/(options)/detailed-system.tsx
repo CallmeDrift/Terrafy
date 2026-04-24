@@ -78,6 +78,17 @@ type ReportAlertEvent = {
 	threshold: number;
 };
 
+type SystemAlertItem = {
+	type: string;
+	variableId: number | null;
+	variableName: string;
+	value: number;
+	unit: string;
+	direction: string;
+	systemId: string;
+	timestamp: string;
+};
+
 type ConsolidatedReport = {
 	generatedAt: string;
 	period: {
@@ -301,6 +312,36 @@ const normalizeAnalyticsRows = (payload: any): AnalyticsRow[] => {
 		.filter(Boolean) as AnalyticsRow[];
 };
 
+const mapDirectionToThresholdType = (direction?: string): "min" | "max" | null => {
+	const normalized = String(direction || "").toLowerCase();
+
+	if (!normalized) {
+		return null;
+	}
+
+	if (
+		normalized.includes("below") ||
+		normalized.includes("lower") ||
+		normalized.includes("under") ||
+		normalized.includes("debajo") ||
+		normalized.includes("min")
+	) {
+		return "min";
+	}
+
+	if (
+		normalized.includes("above") ||
+		normalized.includes("upper") ||
+		normalized.includes("over") ||
+		normalized.includes("encima") ||
+		normalized.includes("max")
+	) {
+		return "max";
+	}
+
+	return null;
+};
+
 export default function DetailedSystem() {
 	const router = useRouter();
 	const { systemId } = useLocalSearchParams<{ systemId?: string }>();
@@ -330,6 +371,8 @@ export default function DetailedSystem() {
 	const [reportDownloadFormat, setReportDownloadFormat] = useState<ReportDownloadFormat>("excel");
 	const [reportData, setReportData] = useState<ConsolidatedReport | null>(null);
 	const [reportMessage, setReportMessage] = useState("");
+	const [systemAlerts, setSystemAlerts] = useState<SystemAlertItem[]>([]);
+	const [loadingAlerts, setLoadingAlerts] = useState(false);
 
 	const getVariableId = (variable: AgronomicVariable) =>
 		variable.variableId ?? variable.id ?? null;
@@ -955,7 +998,6 @@ export default function DetailedSystem() {
 			}
 
 			const variableSummaries: ReportVariableSummary[] = [];
-			const alertEvents: ReportAlertEvent[] = [];
 			const failedVariables: string[] = [];
 
 			for (const variable of exportableVariables) {
@@ -1002,39 +1044,50 @@ export default function DetailedSystem() {
 						minimum: min,
 						maximum: max,
 					});
-
-					const hasMinThreshold =
-						typeof variable.minValue === "number" && !Number.isNaN(variable.minValue);
-					const hasMaxThreshold =
-						typeof variable.maxValue === "number" && !Number.isNaN(variable.maxValue);
-
-					for (const row of rows) {
-						if (hasMinThreshold && row.avg < (variable.minValue as number)) {
-							alertEvents.push({
-								variableId: variable.id,
-								variableName: variable.name,
-								timestamp: row.timestamp,
-								value: row.avg,
-								thresholdType: "min",
-								threshold: variable.minValue as number,
-							});
-						}
-
-						if (hasMaxThreshold && row.avg > (variable.maxValue as number)) {
-							alertEvents.push({
-								variableId: variable.id,
-								variableName: variable.name,
-								timestamp: row.timestamp,
-								value: row.avg,
-								thresholdType: "max",
-								threshold: variable.maxValue as number,
-							});
-						}
-					}
 				} catch {
 					failedVariables.push(variable.name);
 				}
 			}
+
+			const alertsFromApi = await fetchSystemAlerts({
+				startDate: reportStartDate,
+				endDate: reportEndDate,
+				silent: true,
+			});
+
+			const variableThresholdMap = new Map(
+				exportableVariables.map((variable) => [variable.id, variable])
+			);
+
+			const alertEvents: ReportAlertEvent[] = alertsFromApi
+				.map((alertItem) => {
+					if (alertItem.variableId === null) {
+						return null;
+					}
+
+					const thresholdType = mapDirectionToThresholdType(alertItem.direction);
+					if (!thresholdType) {
+						return null;
+					}
+
+					const variableMeta = variableThresholdMap.get(alertItem.variableId);
+					const threshold =
+						thresholdType === "min" ? variableMeta?.minValue : variableMeta?.maxValue;
+
+					if (typeof threshold !== "number" || Number.isNaN(threshold)) {
+						return null;
+					}
+
+					return {
+						variableId: alertItem.variableId,
+						variableName: alertItem.variableName,
+						timestamp: alertItem.timestamp,
+						value: alertItem.value,
+						thresholdType,
+						threshold,
+					};
+				})
+				.filter(Boolean) as ReportAlertEvent[];
 
 			if (variableSummaries.length === 0) {
 				setReportData(null);
@@ -1250,6 +1303,91 @@ export default function DetailedSystem() {
 		}
 	};
 
+	const fetchSystemAlerts = useCallback(
+		async (options?: {
+			startDate?: Date;
+			endDate?: Date;
+			silent?: boolean;
+		}) => {
+			const systemIdentifier = String(systemId || detail?.systemId || detail?.id || "");
+
+			if (!systemIdentifier) {
+				setSystemAlerts([]);
+				return [] as SystemAlertItem[];
+			}
+
+			const silent = Boolean(options?.silent);
+
+			try {
+				if (!silent) {
+					setLoadingAlerts(true);
+				}
+
+				const rawToken = await AsyncStorage.getItem("token");
+				const token = rawToken ? rawToken.replace(/"/g, "") : null;
+
+				const params = new URLSearchParams();
+				if (options?.startDate) {
+					params.set("start_date", toApiStartDate(options.startDate));
+				}
+				if (options?.endDate) {
+					params.set("end_date", toApiEndDate(options.endDate));
+				}
+
+				const endpoint =
+					`${API_URL}/growing-systems/${systemIdentifier}/alerts` +
+					(params.toString() ? `?${params.toString()}` : "");
+
+				const response = await fetch(endpoint, {
+					headers: {
+						Accept: "application/json",
+						...(token ? { Authorization: `Bearer ${token}` } : {}),
+					},
+				});
+
+				if (!response.ok) {
+					throw new Error(`No se pudieron recuperar las alertas (HTTP ${response.status})`);
+				}
+
+				const payload = await response.json();
+				const alertsCollection = Array.isArray(payload?.alerts) ? payload.alerts : [];
+
+				const normalizedAlerts = alertsCollection
+					.map((item: any) => {
+						const parsedVariableId = Number(item?.variable_id ?? item?.variableId);
+						const parsedValue = Number(item?.value);
+
+						if (Number.isNaN(parsedValue)) {
+							return null;
+						}
+
+						return {
+							type: String(item?.type ?? "alert"),
+							variableId: Number.isNaN(parsedVariableId) ? null : parsedVariableId,
+							variableName: String(item?.variable_name ?? item?.variableName ?? "Variable"),
+							value: parsedValue,
+							unit: String(item?.unit ?? ""),
+							direction: String(item?.direction ?? ""),
+							systemId: String(item?.system_id ?? item?.systemId ?? systemIdentifier),
+							timestamp: String(item?.timestamp ?? ""),
+						};
+					})
+					.filter(Boolean) as SystemAlertItem[];
+
+				setSystemAlerts(normalizedAlerts);
+				return normalizedAlerts;
+			} catch {
+				setSystemAlerts([]);
+				return [] as SystemAlertItem[];
+			} finally {
+				if (!silent) {
+					setLoadingAlerts(false);
+				}
+			}
+		},
+		[systemId, detail?.systemId, detail?.id]
+	);
+
 	const fetchSystemDetail = useCallback(async () => {
 		if (!systemId) {
 			Alert.alert("Error", "No se recibió el identificador del sistema");
@@ -1347,12 +1485,13 @@ export default function DetailedSystem() {
 			};
 
 			setDetail(parsedDetail);
+			await fetchSystemAlerts({ silent: true });
 		} catch (error) {
 			Alert.alert("Error", "No se pudieron cargar los detalles del sistema");
 		} finally {
 			setLoading(false);
 		}
-	}, [systemId]);
+	}, [systemId, fetchSystemAlerts]);
 
 	useEffect(() => {
 		fetchSystemDetail();
@@ -1389,177 +1528,6 @@ export default function DetailedSystem() {
 					<Ionicons name="analytics-outline" size={16} color="#166534" />
 					<Text style={styles.analysisButtonText}>Analisis comparativo</Text>
 				</TouchableOpacity>
-
-				<View style={styles.exportAllContainer}>
-					<Text style={styles.exportAllLabel}>Exportar historicos de todas las variables</Text>
-					<View style={styles.exportAllFormatRow}>
-						<TouchableOpacity
-							style={[
-								styles.exportAllFormatOption,
-								bulkExportFormat === "excel" && styles.exportAllFormatOptionSelected,
-							]}
-							onPress={() => setBulkExportFormat("excel")}
-						>
-							<Text
-								style={[
-									styles.exportAllFormatText,
-									bulkExportFormat === "excel" && styles.exportAllFormatTextSelected,
-								]}
-							>
-								Excel
-							</Text>
-						</TouchableOpacity>
-
-						<TouchableOpacity
-							style={[
-								styles.exportAllFormatOption,
-								bulkExportFormat === "csv" && styles.exportAllFormatOptionSelected,
-							]}
-							onPress={() => setBulkExportFormat("csv")}
-						>
-							<Text
-								style={[
-									styles.exportAllFormatText,
-									bulkExportFormat === "csv" && styles.exportAllFormatTextSelected,
-								]}
-							>
-								CSV
-							</Text>
-						</TouchableOpacity>
-					</View>
-
-					<TouchableOpacity
-						style={[
-							styles.exportAllButton,
-							(exportingAll || loading) && styles.buttonDisabled,
-						]}
-						onPress={handleExportAllVariables}
-						disabled={exportingAll || loading}
-					>
-						<Ionicons name="download-outline" size={16} color="#ffffff" />
-						<Text style={styles.exportAllButtonText}>
-							{exportingAll ? "Descargando..." : "Descargar todas"}
-						</Text>
-					</TouchableOpacity>
-				</View>
-
-				<View style={styles.reportContainer}>
-					<Text style={styles.reportTitle}>Generar reporte consolidado</Text>
-
-					<Text style={styles.reportLabel}>Fecha inicial</Text>
-					{Platform.OS === "web" ? (
-						<TextInput
-							style={styles.reportInput}
-							value={toDateInput(reportStartDate)}
-							onChangeText={(value) => {
-								const parsed = new Date(`${value}T00:00:00`);
-								if (!Number.isNaN(parsed.getTime())) {
-									setReportStartDate(parsed);
-								}
-							}}
-							placeholder="YYYY-MM-DD"
-						/>
-					) : (
-						<TouchableOpacity style={styles.reportDateButton} onPress={openReportStartDatePicker}>
-							<Ionicons name="calendar-outline" size={16} color="#166534" />
-							<Text style={styles.reportDateText}>{toPickerLabel(reportStartDate)}</Text>
-						</TouchableOpacity>
-					)}
-
-					<Text style={styles.reportLabel}>Fecha final</Text>
-					{Platform.OS === "web" ? (
-						<TextInput
-							style={styles.reportInput}
-							value={toDateInput(reportEndDate)}
-							onChangeText={(value) => {
-								const parsed = new Date(`${value}T00:00:00`);
-								if (!Number.isNaN(parsed.getTime())) {
-									setReportEndDate(parsed);
-								}
-							}}
-							placeholder="YYYY-MM-DD"
-						/>
-					) : (
-						<TouchableOpacity style={styles.reportDateButton} onPress={openReportEndDatePicker}>
-							<Ionicons name="calendar-outline" size={16} color="#166534" />
-							<Text style={styles.reportDateText}>{toPickerLabel(reportEndDate)}</Text>
-						</TouchableOpacity>
-					)}
-
-					<TouchableOpacity
-						style={[styles.reportGenerateButton, (generatingReport || loading) && styles.buttonDisabled]}
-						onPress={handleGenerateReport}
-						disabled={generatingReport || loading}
-					>
-						<Ionicons name="document-text-outline" size={16} color="#ffffff" />
-						<Text style={styles.reportGenerateButtonText}>
-							{generatingReport ? "Generando..." : "Generar reporte"}
-						</Text>
-					</TouchableOpacity>
-
-					{reportData && (
-						<>
-							<View style={styles.reportSummaryBox}>
-								<Text style={styles.reportSummaryText}>
-									Variables con datos: {reportData.summary.variablesWithData} / {reportData.summary.variablesConfigured}
-								</Text>
-								<Text style={styles.reportSummaryText}>
-									Registros: {reportData.summary.totalRecords} | Alertas: {reportData.summary.alertEvents}
-								</Text>
-							</View>
-
-							<Text style={styles.reportLabel}>Descargar reporte</Text>
-							<View style={styles.reportFormatRow}>
-								<TouchableOpacity
-									style={[
-										styles.reportFormatOption,
-										reportDownloadFormat === "excel" && styles.reportFormatOptionSelected,
-									]}
-									onPress={() => setReportDownloadFormat("excel")}
-								>
-									<Text
-										style={[
-											styles.reportFormatText,
-											reportDownloadFormat === "excel" && styles.reportFormatTextSelected,
-										]}
-									>
-										Excel
-									</Text>
-								</TouchableOpacity>
-
-								<TouchableOpacity
-									style={[
-										styles.reportFormatOption,
-										reportDownloadFormat === "json" && styles.reportFormatOptionSelected,
-									]}
-									onPress={() => setReportDownloadFormat("json")}
-								>
-									<Text
-										style={[
-											styles.reportFormatText,
-											reportDownloadFormat === "json" && styles.reportFormatTextSelected,
-										]}
-									>
-										JSON
-									</Text>
-								</TouchableOpacity>
-							</View>
-
-							<TouchableOpacity
-								style={[styles.reportDownloadButton, downloadingReport && styles.buttonDisabled]}
-								onPress={handleDownloadReport}
-								disabled={downloadingReport}
-							>
-								<Ionicons name="download-outline" size={16} color="#ffffff" />
-								<Text style={styles.reportDownloadButtonText}>
-									{downloadingReport ? "Descargando..." : "Descargar reporte"}
-								</Text>
-							</TouchableOpacity>
-						</>
-					)}
-
-					{reportMessage ? <Text style={styles.reportInfoText}>{reportMessage}</Text> : null}
-				</View>
 			</View>
 
 			{showReportStartPicker && Platform.OS === "ios" && (
@@ -1631,6 +1599,29 @@ export default function DetailedSystem() {
 							</Text>
 						</View>
 					</View>
+
+						<View style={styles.alertHistoryCard}>
+							<Text style={styles.alertHistoryTitle}>Historial de alertas recientes</Text>
+							{loadingAlerts ? (
+								<ActivityIndicator size="small" color="#dc2626" />
+							) : systemAlerts.length === 0 ? (
+								<Text style={styles.alertHistoryEmptyText}>
+									No hay alertas registradas para este sistema.
+								</Text>
+							) : (
+								systemAlerts.slice(0, 5).map((alertItem, index) => (
+									<View key={`${alertItem.variableName}-${alertItem.timestamp}-${index}`} style={styles.alertHistoryRow}>
+										<Text style={styles.alertHistoryVariable}>{alertItem.variableName}</Text>
+										<Text style={styles.alertHistoryMeta}>
+											{alertItem.value} {alertItem.unit || ""} · {alertItem.direction || "sin dirección"}
+										</Text>
+										<Text style={styles.alertHistoryMeta}>
+											{alertItem.timestamp ? new Date(alertItem.timestamp).toLocaleString() : "Sin fecha"}
+										</Text>
+									</View>
+								))
+							)}
+						</View>
 
 					<Text style={styles.sectionTitle}>Variables agronómicas</Text>
 
@@ -1761,6 +1752,177 @@ export default function DetailedSystem() {
 							);
 						})
 					)}
+
+					<View style={styles.exportAllContainer}>
+						<Text style={styles.exportAllLabel}>Exportar historicos de todas las variables</Text>
+						<View style={styles.exportAllFormatRow}>
+							<TouchableOpacity
+								style={[
+									styles.exportAllFormatOption,
+									bulkExportFormat === "excel" && styles.exportAllFormatOptionSelected,
+								]}
+								onPress={() => setBulkExportFormat("excel")}
+							>
+								<Text
+									style={[
+										styles.exportAllFormatText,
+										bulkExportFormat === "excel" && styles.exportAllFormatTextSelected,
+									]}
+								>
+									Excel
+								</Text>
+							</TouchableOpacity>
+
+							<TouchableOpacity
+								style={[
+									styles.exportAllFormatOption,
+									bulkExportFormat === "csv" && styles.exportAllFormatOptionSelected,
+								]}
+								onPress={() => setBulkExportFormat("csv")}
+							>
+								<Text
+									style={[
+										styles.exportAllFormatText,
+										bulkExportFormat === "csv" && styles.exportAllFormatTextSelected,
+									]}
+								>
+									CSV
+								</Text>
+							</TouchableOpacity>
+						</View>
+
+						<TouchableOpacity
+							style={[
+								styles.exportAllButton,
+								(exportingAll || loading) && styles.buttonDisabled,
+							]}
+							onPress={handleExportAllVariables}
+							disabled={exportingAll || loading}
+						>
+							<Ionicons name="download-outline" size={16} color="#ffffff" />
+							<Text style={styles.exportAllButtonText}>
+								{exportingAll ? "Descargando..." : "Descargar todas"}
+							</Text>
+						</TouchableOpacity>
+					</View>
+
+					<View style={styles.reportContainer}>
+						<Text style={styles.reportTitle}>Generar reporte consolidado</Text>
+
+						<Text style={styles.reportLabel}>Fecha inicial</Text>
+						{Platform.OS === "web" ? (
+							<TextInput
+								style={styles.reportInput}
+								value={toDateInput(reportStartDate)}
+								onChangeText={(value) => {
+									const parsed = new Date(`${value}T00:00:00`);
+									if (!Number.isNaN(parsed.getTime())) {
+										setReportStartDate(parsed);
+									}
+								}}
+								placeholder="YYYY-MM-DD"
+							/>
+						) : (
+							<TouchableOpacity style={styles.reportDateButton} onPress={openReportStartDatePicker}>
+								<Ionicons name="calendar-outline" size={16} color="#166534" />
+								<Text style={styles.reportDateText}>{toPickerLabel(reportStartDate)}</Text>
+							</TouchableOpacity>
+						)}
+
+						<Text style={styles.reportLabel}>Fecha final</Text>
+						{Platform.OS === "web" ? (
+							<TextInput
+								style={styles.reportInput}
+								value={toDateInput(reportEndDate)}
+								onChangeText={(value) => {
+									const parsed = new Date(`${value}T00:00:00`);
+									if (!Number.isNaN(parsed.getTime())) {
+										setReportEndDate(parsed);
+									}
+								}}
+								placeholder="YYYY-MM-DD"
+							/>
+						) : (
+							<TouchableOpacity style={styles.reportDateButton} onPress={openReportEndDatePicker}>
+								<Ionicons name="calendar-outline" size={16} color="#166534" />
+								<Text style={styles.reportDateText}>{toPickerLabel(reportEndDate)}</Text>
+							</TouchableOpacity>
+						)}
+
+						<TouchableOpacity
+							style={[styles.reportGenerateButton, (generatingReport || loading) && styles.buttonDisabled]}
+							onPress={handleGenerateReport}
+							disabled={generatingReport || loading}
+						>
+							<Ionicons name="document-text-outline" size={16} color="#ffffff" />
+							<Text style={styles.reportGenerateButtonText}>
+								{generatingReport ? "Generando..." : "Generar reporte"}
+							</Text>
+						</TouchableOpacity>
+
+						{reportData && (
+							<>
+								<View style={styles.reportSummaryBox}>
+									<Text style={styles.reportSummaryText}>
+										Variables con datos: {reportData.summary.variablesWithData} / {reportData.summary.variablesConfigured}
+									</Text>
+									<Text style={styles.reportSummaryText}>
+										Registros: {reportData.summary.totalRecords} | Alertas: {reportData.summary.alertEvents}
+									</Text>
+								</View>
+
+								<Text style={styles.reportLabel}>Descargar reporte</Text>
+								<View style={styles.reportFormatRow}>
+									<TouchableOpacity
+										style={[
+											styles.reportFormatOption,
+											reportDownloadFormat === "excel" && styles.reportFormatOptionSelected,
+										]}
+										onPress={() => setReportDownloadFormat("excel")}
+									>
+										<Text
+											style={[
+												styles.reportFormatText,
+												reportDownloadFormat === "excel" && styles.reportFormatTextSelected,
+											]}
+										>
+											Excel
+										</Text>
+									</TouchableOpacity>
+
+									<TouchableOpacity
+										style={[
+											styles.reportFormatOption,
+											reportDownloadFormat === "json" && styles.reportFormatOptionSelected,
+										]}
+										onPress={() => setReportDownloadFormat("json")}
+									>
+										<Text
+											style={[
+												styles.reportFormatText,
+												reportDownloadFormat === "json" && styles.reportFormatTextSelected,
+											]}
+										>
+											JSON
+										</Text>
+									</TouchableOpacity>
+								</View>
+
+								<TouchableOpacity
+									style={[styles.reportDownloadButton, downloadingReport && styles.buttonDisabled]}
+									onPress={handleDownloadReport}
+									disabled={downloadingReport}
+								>
+									<Ionicons name="download-outline" size={16} color="#ffffff" />
+									<Text style={styles.reportDownloadButtonText}>
+										{downloadingReport ? "Descargando..." : "Descargar reporte"}
+									</Text>
+								</TouchableOpacity>
+							</>
+						)}
+
+						{reportMessage ? <Text style={styles.reportInfoText}>{reportMessage}</Text> : null}
+					</View>
 				</>
 			)}
 
@@ -2082,6 +2244,39 @@ const styles = StyleSheet.create({
 	alertBadgeText: {
 		color: "#991b1b",
 		fontWeight: "700",
+		fontSize: 12,
+	},
+	alertHistoryCard: {
+		backgroundColor: "#fff1f2",
+		borderWidth: 1,
+		borderColor: "#fecdd3",
+		borderRadius: 14,
+		padding: 12,
+		marginBottom: 14,
+	},
+	alertHistoryTitle: {
+		color: "#9f1239",
+		fontWeight: "700",
+		fontSize: 13,
+		marginBottom: 8,
+	},
+	alertHistoryRow: {
+		paddingVertical: 6,
+		borderBottomWidth: 1,
+		borderBottomColor: "#ffe4e6",
+	},
+	alertHistoryVariable: {
+		color: "#881337",
+		fontWeight: "700",
+		fontSize: 12,
+	},
+	alertHistoryMeta: {
+		color: "#9f1239",
+		fontSize: 11,
+		marginTop: 2,
+	},
+	alertHistoryEmptyText: {
+		color: "#9f1239",
 		fontSize: 12,
 	},
 	systemName: {
