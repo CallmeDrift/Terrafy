@@ -7,7 +7,6 @@
     "icon": "./assets/images/icon.png",
     "scheme": "terrafy",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "ios": {
       "supportsTablet": true
     },
@@ -18,7 +17,8 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "edgeToEdgeEnabled": true,
+      "versionCode": 3,
+      "googleServicesFile": "./google-services.json",
       "predictiveBackGestureEnabled": false,
       "package": "com.callmedrift.Terrafy"
     },
@@ -47,6 +47,7 @@
     },
     "extra": {
       "router": {},
+      "firebaseProjectId": "fir-messaging-test-dfafc",
       "eas": {
         "projectId": "0f13d2c8-bafa-449d-980a-dde0c0edc978"
       }

@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "387098260416",
+    "project_id": "fir-messaging-test-dfafc",
+    "storage_bucket": "fir-messaging-test-dfafc.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:387098260416:android:ed78b767998b6cd7768e25",
+        "android_client_info": {
+          "package_name": "com.callmedrift.Terrafy"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBNk804EBmKinmpjl-w3VsR5KIdHmexulE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:387098260416:android:f0a0791a8c1fe704768e25",
+        "android_client_info": {
+          "package_name": "com.example.parcial2_messaging_firebase"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBNk804EBmKinmpjl-w3VsR5KIdHmexulE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
