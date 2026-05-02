@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { Stack, usePathname } from 'expo-router';
+import { Stack, useLocalSearchParams, usePathname } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -23,9 +23,11 @@ import { ChatbotPanel } from './(options)/chatbot';
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   const pathname = usePathname();
+  const params = useLocalSearchParams<{ systemId?: string }>();
   const [isChatOpen, setIsChatOpen] = useState(false);
   const { width, height } = Dimensions.get('window');
   const isAuthScreen = pathname === '/' || pathname === '/index' || pathname === '/register';
+  const isDetailedSystem = pathname.includes('detailed-system');
 
   const startX = Math.max(16, width - 76);
   const startY = Math.max(80, height - 180);
@@ -87,7 +89,7 @@ export default function RootLayout() {
         <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
       </Stack>
 
-      {!isAuthScreen && (
+      {isDetailedSystem && (
         <>
           <View pointerEvents="box-none" style={styles.fabOverlay}>
             <Animated.View
@@ -112,7 +114,7 @@ export default function RootLayout() {
           <Modal visible={isChatOpen} transparent animationType="fade" onRequestClose={() => setIsChatOpen(false)}>
             <Pressable style={styles.modalBackdrop} onPress={() => setIsChatOpen(false)}>
               <Pressable style={styles.modalContent} onPress={(event) => event.stopPropagation()}>
-                <ChatbotPanel onClose={() => setIsChatOpen(false)} />
+                <ChatbotPanel onClose={() => setIsChatOpen(false)} systemId={params.systemId} />
               </Pressable>
             </Pressable>
           </Modal>

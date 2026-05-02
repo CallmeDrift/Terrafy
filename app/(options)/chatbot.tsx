@@ -3,9 +3,10 @@ import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 
 
 type ChatbotPanelProps = {
 	onClose?: () => void;
+	systemId?: string;
 };
 
-export function ChatbotPanel({ onClose }: ChatbotPanelProps) {
+export function ChatbotPanel({ onClose, systemId }: ChatbotPanelProps) {
 	return (
 		<View style={styles.chatCard}>
 			<View style={styles.chatHeader}>
