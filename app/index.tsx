@@ -19,7 +19,7 @@ export default function LoginScreen() {
   const [errors, setErrors] = useState<any>({});
 
   const router = useRouter();
-
+//YEAH BUDDY
   const validate = () => {
     let newErrors: any = {};
 
