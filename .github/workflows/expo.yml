@@ -26,7 +26,7 @@ jobs:
               run: npx expo lint
 
             - name: Install EAS CLI
-              run: npm install -g eas-cli
+              run: npm install -g eas-cli@latest
 
             - name: Login to Expo
               run: npx eas-cli whoami
@@ -34,6 +34,6 @@ jobs:
                   EXPO_TOKEN: ${{ secrets.TERRAFY }}
 
             - name: Build Android
-              run: npx eas-cli build --platform android --non-interactive
+              run: npx eas-cli@latest build --platform android --non-interactive
               env:
                   EXPO_TOKEN: ${{ secrets.TERRAFY }}
