@@ -29,9 +29,11 @@ jobs:
               run: npm install -g eas-cli
 
             - name: Login to Expo
-              if: github.event_name == 'push'
-              run: npx eas-cli login --token ${{ secrets.TERRAFY }}
+              run: npx eas-cli whoami
+              env:
+                  EXPO_TOKEN: ${{ secrets.TERRAFY }}
 
             - name: Build Android
-              if: github.event_name == 'push'
               run: npx eas-cli build --platform android --non-interactive
+              env:
+                  EXPO_TOKEN: ${{ secrets.TERRAFY }}

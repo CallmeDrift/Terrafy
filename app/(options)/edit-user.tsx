@@ -3,10 +3,13 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
+  Alert,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
+  ToastAndroid,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -19,6 +22,15 @@ export default function EditUser() {
   const [password, setPassword] = useState("");
 
   const [errors, setErrors] = useState<any>({});
+
+  const showToast = (message: string) => {
+    if (Platform.OS === "android") {
+      ToastAndroid.show(message, ToastAndroid.SHORT);
+      return;
+    }
+
+    Alert.alert("Información", message);
+  };
 
   useEffect(() => {
     const loadUser = async () => {
@@ -60,7 +72,7 @@ export default function EditUser() {
       const token = await AsyncStorage.getItem("token");
 
       if (!userStored || !token) {
-        alert("Not valid session");
+        showToast("Sesión no válida");
         return;
       }
 
@@ -92,19 +104,17 @@ export default function EditUser() {
       const data = await response.json();
 
       if (!response.ok) {
-        alert(data.message || "Error al actualizar");
+        showToast(data.message || "Error al actualizar");
         return;
       }
       const updatedUser = { ...user, ...data };
       await AsyncStorage.setItem("user", JSON.stringify(updatedUser));
 
-      alert("Perfil actualizado");
+      showToast("Perfil actualizado");
       router.back();
-      // MI LOCO, CAMBIA LA ALERTA POR UN TOAST
-      //PQ YO?? PQ LUIS SIGUE SIN CHAMBEAR UN CARAJO
     } catch (error) {
       console.error("Error:", error);
-      alert("Error de conexión");
+      showToast("Error de conexión");
     }
   };
 
