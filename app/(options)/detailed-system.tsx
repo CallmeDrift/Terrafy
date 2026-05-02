@@ -371,6 +371,7 @@ export default function DetailedSystem() {
 	const [reportDownloadFormat, setReportDownloadFormat] = useState<ReportDownloadFormat>("excel");
 	const [reportData, setReportData] = useState<ConsolidatedReport | null>(null);
 	const [reportMessage, setReportMessage] = useState("");
+	const [zoneAAlertHandled, setZoneAAlertHandled] = useState(false);
 	const [systemAlerts, setSystemAlerts] = useState<SystemAlertItem[]>([]);
 	const [loadingAlerts, setLoadingAlerts] = useState(false);
 
@@ -1502,6 +1503,10 @@ export default function DetailedSystem() {
 	const hasOutOfThresholdVariables = variables.some((variable) =>
 		isVariableOutOfThreshold(variable)
 	);
+	const isZonaA = Boolean(
+		String(detail?.name || detail?.ubication || "").toLowerCase().includes("zona a")
+	);
+	const showZoneAAlert = isZonaA && !zoneAAlertHandled;
 
 	return (
 		<ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -1602,11 +1607,25 @@ export default function DetailedSystem() {
 
 						<View style={styles.alertHistoryCard}>
 							<Text style={styles.alertHistoryTitle}>Historial de alertas recientes</Text>
+							{showZoneAAlert && (
+								<View style={styles.zoneAlertBanner}>
+									<Text style={styles.zoneAlertTitle}>Alerta Zona A</Text>
+									<Text style={styles.zoneAlertText}>
+										La salinidad en esta zona requiere atención inmediata.
+									</Text>
+									<TouchableOpacity
+										style={styles.zoneAlertButton}
+										onPress={() => setZoneAAlertHandled(true)}
+									>
+										<Text style={styles.zoneAlertButtonText}>Atender alerta</Text>
+									</TouchableOpacity>
+								</View>
+							)}
 							{loadingAlerts ? (
 								<ActivityIndicator size="small" color="#dc2626" />
 							) : systemAlerts.length === 0 ? (
 								<Text style={styles.alertHistoryEmptyText}>
-									No hay alertas registradas para este sistema.
+									
 								</Text>
 							) : (
 								systemAlerts.slice(0, 5).map((alertItem, index) => (
@@ -1633,12 +1652,14 @@ export default function DetailedSystem() {
 						variables.map((variable, index) => {
 							const outOfThreshold = isVariableOutOfThreshold(variable);
 							const currentValue = getVariableCurrentValue(variable);
+							const isSalinityVariable = String(variable.name || "").toLowerCase().includes("salinidad");
 
 							return (
 							<View
 								key={String(variable.variableId || variable.id || index)}
 								style={[
 									styles.variableCard,
+									showZoneAAlert && isSalinityVariable && styles.salinityVariableCard,
 									outOfThreshold && styles.alertVariableCard,
 								]}
 							>
@@ -2246,6 +2267,41 @@ const styles = StyleSheet.create({
 		fontWeight: "700",
 		fontSize: 12,
 	},
+	zoneAlertBanner: {
+		backgroundColor: "#fff1f2",
+		borderWidth: 1,
+		borderColor: "#fda4af",
+		borderRadius: 12,
+		padding: 12,
+		marginBottom: 12,
+	},
+	zoneAlertTitle: {
+		color: "#be123c",
+		fontWeight: "700",
+		fontSize: 14,
+		marginBottom: 4,
+	},
+	zoneAlertText: {
+		color: "#881337",
+		fontSize: 13,
+		lineHeight: 18,
+	},
+	zoneAlertButton: {
+		alignSelf: "flex-start",
+		marginTop: 10,
+		flexDirection: "row",
+		alignItems: "center",
+		gap: 6,
+		backgroundColor: "#16a34a",
+		paddingVertical: 7,
+		paddingHorizontal: 12,
+		borderRadius: 999,
+	},
+	zoneAlertButtonText: {
+		color: "#ffffff",
+		fontWeight: "700",
+		fontSize: 12,
+	},
 	alertHistoryCard: {
 		backgroundColor: "#fff1f2",
 		borderWidth: 1,
@@ -2329,6 +2385,11 @@ const styles = StyleSheet.create({
 		padding: 14,
 		marginBottom: 10,
 		elevation: 2,
+	},
+	salinityVariableCard: {
+		backgroundColor: "#fff5f5",
+		borderWidth: 1,
+		borderColor: "#fecaca",
 	},
 	alertVariableCard: {
 		backgroundColor: "#fef2f2",

@@ -122,9 +122,6 @@ export default function LoginScreen() {
         </View>
         {errors.password && <Text style={styles.error}>{errors.password}</Text>}
 
-        {/* Forgot */}
-        <Text style={styles.forgot}>¿Olvidaste tu contraseña?</Text>
-
         {/* Login Button */}
         <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
           <Text style={styles.loginText}>Iniciar sesión</Text>
